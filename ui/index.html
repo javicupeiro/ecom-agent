@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>SaborMix Agent</title>
+    <style>
+      body { font-family: system-ui; max-width: 640px; margin: 2rem auto; }
+      #chat { min-height: 50vh; border: 1px solid #ddd; padding: 1rem; }
+      .user { color: #1a56db; } .assistant { color: #111; }
+      input { width: 100%; padding: .6rem; margin-top: .5rem; }
+    </style>
+  </head>
+  <body>
+    <h1>SaborMix Agent</h1>
+    <div id="chat"></div>
+    <input id="input" placeholder="Ask about products, recipes or support..." />
+    <script>
+      const API = "http://127.0.0.1:8000";
+      const chat = document.getElementById("chat");
+      const input = document.getElementById("input");
+
+      function add(role, text) {
+        const p = document.createElement("p");
+        p.className = role;
+        p.textContent = (role === "user" ? "You: " : "Agent: ") + text;
+        chat.appendChild(p);
+      }
+
+      async function send() {
+        const text = input.value.trim();
+        if (!text) return;
+        add("user", text);
+        input.value = "";
+        const res = await fetch(`${API}/chat`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ message: text }),
+        });
+        add("assistant", (await res.json()).reply);
+      }
+
+      input.addEventListener("keydown", (e) => { if (e.key === "Enter") send(); });
+    </script>
+  </body>
+</html>
