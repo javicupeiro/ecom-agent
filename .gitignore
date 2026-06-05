@@ -2,6 +2,7 @@
 __pycache__/
 *.py[cod]
 *$py.class
+*.pyc
 
 # Distribution / packaging
 *.egg
@@ -69,4 +70,5 @@ dmypy.json
 # OS
 .DS_Store
 Thumbs.db
+.data/
 borrar/

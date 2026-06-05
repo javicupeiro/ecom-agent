@@ -1,0 +1,9 @@
+# Tunable parameters. Secrets go in .env, not here.
+
+[llm]
+provider = "anthropic"        # anthropic | openai
+name = "claude-sonnet-4-6"    
+max_tokens = 1024
+temperature = 0.1
+# top_p = 0.95
+
