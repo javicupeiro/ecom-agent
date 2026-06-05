@@ -7,6 +7,7 @@ from pydantic import BaseModel
 from ecom_agent.config import get_settings
 from ecom_agent.domain.types import Message
 from ecom_agent.providers.factory import build_provider
+from ecom_agent.orchestrator import Conversation
 
 app = FastAPI(title="SaborMix Agent")
 app.add_middleware(
@@ -21,12 +22,28 @@ SYSTEM_PROMPT = (
     "Always reply in the customer's language."
 )
 
+_sessions: dict[str, Conversation] = {}
 
 class ChatIn(BaseModel):
+    session_id: str = "default"
     message: str
-
+    lang: str | None = None
 
 @app.post("/chat")
 def chat(body: ChatIn) -> dict:
-    messages = [Message.system(SYSTEM_PROMPT), Message.user(body.message)]
-    return {"reply": provider.send(messages).text}
+    if body.session_id not in _sessions:
+        _sessions[body.session_id] = Conversation(
+            provider,
+            lang=body.lang or settings.agent.default_language,
+            max_steps=settings.agent.max_steps,
+        )
+    result = _sessions[body.session_id].send(body.message)
+    return {
+        "reply": result.reply,
+        "trace": {
+            "provider_calls": result.trace.provider_calls,
+            "tools_used": result.trace.tools_used,
+            "usage": result.trace.usage.model_dump(),
+            "steps": result.trace.steps,
+        },
+    }

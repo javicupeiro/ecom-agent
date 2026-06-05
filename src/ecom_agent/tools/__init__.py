@@ -1,0 +1,1 @@
+from . import search_products  # noqa: F401

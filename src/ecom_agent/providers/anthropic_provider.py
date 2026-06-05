@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import os
 
-from ecom_agent.domain.types import Message, Response, Usage
+from ecom_agent.domain.types import Message, Response, Usage,TextBlock, ToolUseBlock, ToolResultBlock, ToolDef
 from ecom_agent.providers.base import LLMProvider
 
 
@@ -29,29 +29,50 @@ class AnthropicProvider(LLMProvider):
         self.temperature = temperature
         self.top_p = top_p
 
-    def send(self, messages: list[Message]) -> Response:
-        system = " ".join(m.content for m in messages if m.role == "system")
-        api_messages = [
-            {"role": m.role, "content": m.content} for m in messages if m.role != "system"
-        ]
+    def send(self, messages, tools):
+        system = " ".join(m.text() for m in messages if m.role == "system")
         kwargs: dict = {
             "model": self._model,
             "max_tokens": self.max_tokens,
             "temperature": self.temperature,
-            "messages": api_messages,
+            "messages": [self._to_api(m) for m in messages if m.role != "system"],
         }
         if system:
             kwargs["system"] = system
         if self.top_p is not None:
             kwargs["top_p"] = self.top_p
+        if tools:
+            kwargs["tools"] = [
+                {"name": t.name, "description": t.description,
+                 "input_schema": t.input_schema or {"type": "object", "properties": {}}}
+                for t in tools
+            ]
+        return self._from_api(self._client.messages.create(**kwargs))
 
-        raw = self._client.messages.create(**kwargs)
-        text = "".join(b.text for b in raw.content if b.type == "text")
-        return Response(
-            text=text,
-            usage=Usage(input_tokens=raw.usage.input_tokens, output_tokens=raw.usage.output_tokens),
-            model=self._model,
-        )
+    def _to_api(self, m):
+        content = []
+        for b in m.content:
+            if isinstance(b, TextBlock):
+                content.append({"type": "text", "text": b.text})
+            elif isinstance(b, ToolUseBlock):
+                content.append({"type": "tool_use", "id": b.id, "name": b.name, "input": b.input})
+            elif isinstance(b, ToolResultBlock):
+                content.append({"type": "tool_result", "tool_use_id": b.tool_use_id,
+                                "content": b.content, "is_error": b.is_error})
+        return {"role": m.role, "content": content}
+
+    def _from_api(self, raw):
+        blocks = []
+        for b in raw.content:
+            if b.type == "text":
+                blocks.append(TextBlock(text=b.text))
+            elif b.type == "tool_use":
+                blocks.append(ToolUseBlock(id=b.id, name=b.name, input=dict(b.input)))
+        stop = "tool_use" if raw.stop_reason == "tool_use" else "end_turn"
+        return Response(blocks=blocks, stop_reason=stop,
+                        usage=Usage(input_tokens=raw.usage.input_tokens,
+                                    output_tokens=raw.usage.output_tokens),
+                        model=self._model)
 
     @property
     def model(self) -> str:

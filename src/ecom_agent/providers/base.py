@@ -9,7 +9,7 @@ from ecom_agent.domain.types import Message, Response
 
 class LLMProvider(ABC):
     @abstractmethod
-    def send(self, messages: list[Message]) -> Response:
+    def send(self, messages, tools) -> Response:
         """Send the conversation context and return a generic response."""
 
     @property

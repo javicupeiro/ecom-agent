@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import os
+import json
 
-from ecom_agent.domain.types import Message, Response, Usage
+from ecom_agent.domain.types import Message, Response, Usage, TextBlock, ToolUseBlock, ToolResultBlock, ToolDef
 from ecom_agent.providers.base import LLMProvider
 
 
@@ -25,27 +26,58 @@ class OpenAIProvider(LLMProvider):
         self.temperature = temperature
         self.top_p = top_p
 
-    def send(self, messages: list[Message]) -> Response:
-        payload = [{"role": m.role, "content": m.content} for m in messages]
+    def send(self, messages, tools):
         kwargs: dict = {
             "model": self._model,
-            "messages": payload,
+            "messages": self._to_openai(messages),
             "temperature": self.temperature,
-            "max_tokens": self.max_tokens,  # some newer models use max_completion_tokens
+            "max_tokens": self.max_tokens,
         }
-        if self.top_p is not None:
-            kwargs["top_p"] = self.top_p
-
-        completion = self._client.chat.completions.create(**kwargs)
-        usage = completion.usage
-        return Response(
-            text=completion.choices[0].message.content or "",
-            usage=Usage(
-                input_tokens=getattr(usage, "prompt_tokens", 0),
-                output_tokens=getattr(usage, "completion_tokens", 0),
-            ),
-            model=self._model,
-        )
+        if tools:
+            kwargs["tools"] = [
+                {"type": "function",
+                 "function": {"name": t.name, "description": t.description,
+                              "parameters": t.input_schema or {"type": "object", "properties": {}}}}
+                for t in tools
+            ]
+        return self._from_openai(self._client.chat.completions.create(**kwargs))
+    
+    def _to_openai(self, messages):
+        out = []
+        for m in messages:
+            results = [b for b in m.content if isinstance(b, ToolResultBlock)]
+            if results:
+                for b in results:
+                    out.append({"role": "tool", "tool_call_id": b.tool_use_id, "content": b.content})
+                continue
+            if m.role == "assistant":
+                calls = [
+                    {"id": b.id, "type": "function",
+                     "function": {"name": b.name, "arguments": json.dumps(b.input)}}
+                    for b in m.content if isinstance(b, ToolUseBlock)
+                ]
+                msg = {"role": "assistant", "content": m.text() or None}
+                if calls:
+                    msg["tool_calls"] = calls
+                out.append(msg)
+            else:
+                out.append({"role": m.role, "content": m.text()})
+        return out
+    
+    def _from_openai(self, completion):
+        choice = completion.choices[0]
+        blocks = []
+        if choice.message.content:
+            blocks.append(TextBlock(text=choice.message.content))
+        for tc in choice.message.tool_calls or []:
+            blocks.append(ToolUseBlock(id=tc.id, name=tc.function.name,
+                                       input=json.loads(tc.function.arguments or "{}")))
+        stop = "tool_use" if choice.finish_reason == "tool_calls" else "end_turn"
+        u = completion.usage
+        return Response(blocks=blocks, stop_reason=stop,
+                        usage=Usage(input_tokens=getattr(u, "prompt_tokens", 0),
+                                    output_tokens=getattr(u, "completion_tokens", 0)),
+                        model=self._model)
 
     @property
     def model(self) -> str:
