@@ -1,45 +1,143 @@
 <!doctype html>
-<html lang="en">
+<html lang="es">
   <head>
     <meta charset="utf-8" />
-    <title>SaborMix Agent</title>
-    <style>
-      body { font-family: system-ui; max-width: 640px; margin: 2rem auto; }
-      #chat { min-height: 50vh; border: 1px solid #ddd; padding: 1rem; }
-      .user { color: #1a56db; } .assistant { color: #111; }
-      input { width: 100%; padding: .6rem; margin-top: .5rem; }
-    </style>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>SaborMix · Plataforma de Agentes</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="/static/styles.css" />
   </head>
   <body>
-    <h1>SaborMix Agent</h1>
-    <div id="chat"></div>
-    <input id="input" placeholder="Ask about products, recipes or support..." />
-    <script>
-      const API = "http://127.0.0.1:8000";
-      const chat = document.getElementById("chat");
-      const input = document.getElementById("input");
+    <header class="topbar">
+      <div class="brand">
+        <div class="logo-dot"></div>
+        <div>
+          <div class="brand-title">SaborMix · Plataforma de Agentes</div>
+          <div class="brand-sub">Chat comercial · recetas · soporte técnico</div>
+        </div>
+      </div>
+      <div class="topbar-right">
+        <div class="status" id="status">
+          <span class="status-dot"></span>
+          <span id="status-text">Conectando…</span>
+        </div>
+        <span class="pill" id="model-pill" title="Modelo activo">—</span>
+        <button class="icon-btn" id="reset-btn" title="Nueva conversación" aria-label="Nueva conversación">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+               stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M3 12a9 9 0 1 0 3-6.7L3 8" />
+            <path d="M3 3v5h5" />
+          </svg>
+        </button>
+      </div>
+    </header>
 
-      function add(role, text) {
-        const p = document.createElement("p");
-        p.className = role;
-        p.textContent = (role === "user" ? "You: " : "Agent: ") + text;
-        chat.appendChild(p);
-      }
+    <nav class="tabbar" role="tablist" aria-label="Agentes">
+      <div class="tabs">
+        <button
+          type="button"
+          class="tab active"
+          id="tab-chat"
+          role="tab"
+          aria-selected="true"
+          aria-controls="view-chat"
+        >
+          <svg
+            width="15"
+            height="15"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.8"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          >
+            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+          </svg>
+          <span>Chat</span>
+        </button>
+      </div>
+      <div class="tabbar-meta">
+        <span class="tabbar-pill">Agente conversacional</span>
+      </div>
+    </nav>
 
-      async function send() {
-        const text = input.value.trim();
-        if (!text) return;
-        add("user", text);
-        input.value = "";
-        const res = await fetch(`${API}/chat`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ message: text }),
-        });
-        add("assistant", (await res.json()).reply);
-      }
+    <main class="layout" id="view-chat" role="tabpanel" aria-labelledby="tab-chat">
+      <section class="chat-panel">
+        <div class="chat-history" id="chat">
+          <div class="empty-state" id="empty-state">
+            <div class="empty-title">Pega o escribe tu consulta</div>
+            <div class="empty-sub">
+              El agente responderá sobre productos SaborMix, recetas y soporte con trazas
+              visibles para cada llamada al modelo y a las herramientas.
+            </div>
+          </div>
+        </div>
 
-      input.addEventListener("keydown", (e) => { if (e.key === "Enter") send(); });
-    </script>
+        <form class="composer" id="composer">
+          <textarea
+            id="input"
+            rows="5"
+            placeholder="Escribe tu mensaje…"
+            spellcheck="false"
+          ></textarea>
+          <div class="composer-actions">
+            <div class="hint">Enter para enviar · Shift + Enter para salto de línea</div>
+            <button class="send-btn" id="send" type="submit" aria-label="Enviar mensaje" title="Enviar (Enter)">
+              <span class="btn-label">Enviar</span>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                   stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M5 12h14M13 6l6 6-6 6" />
+              </svg>
+            </button>
+          </div>
+        </form>
+      </section>
+
+      <aside class="trace-panel">
+        <header class="trace-header">
+          <div>
+            <div class="trace-title">Actividad del agente</div>
+            <div class="trace-sub">Cada turno muestra modelo, herramientas y respuesta</div>
+          </div>
+          <button class="icon-btn ghost" id="trace-clear" title="Limpiar trazas" aria-label="Limpiar trazas">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                 stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M3 6h18" />
+              <path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+              <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
+            </svg>
+          </button>
+        </header>
+
+        <div class="trace-log" id="trace">
+          <div class="panel-empty" id="trace-empty">
+            <div class="pe-icon">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                   stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
+              </svg>
+            </div>
+            <div class="pe-title">Sin actividad aún</div>
+            <div class="pe-sub">
+              El resumen estructurado del turno aparecerá aquí cuando envíes el primer mensaje.
+            </div>
+          </div>
+        </div>
+
+        <footer class="trace-footer">
+          <span class="trace-stat">Llamadas <b id="stat-calls">0</b></span>
+          <span class="trace-stat">Tokens <b id="stat-tokens">0 / 0</b></span>
+          <span class="trace-stat">Herramientas <b id="stat-tools">0</b></span>
+        </footer>
+      </aside>
+    </main>
+
+    <script src="/static/app.js"></script>
   </body>
 </html>

@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from ecom_agent.config import get_settings
@@ -13,6 +15,12 @@ app = FastAPI(title="SaborMix Agent")
 app.add_middleware(
     CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"]
 )
+app.mount("/static", StaticFiles(directory="ui"), name="static")
+
+
+@app.get("/")
+def index() -> FileResponse:
+    return FileResponse("ui/index.html")
 
 settings = get_settings()
 provider = build_provider(settings)
