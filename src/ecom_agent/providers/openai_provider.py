@@ -1,4 +1,4 @@
-"""OpenAI (GPT) adapter. The only module aware of this SDK's wire format."""
+"""OpenAI adapter that translates between SDK payloads and core types."""
 
 from __future__ import annotations
 
@@ -10,6 +10,8 @@ from ecom_agent.providers.base import LLMProvider
 
 
 class OpenAIProvider(LLMProvider):
+    """Wrap the OpenAI chat completions API behind the provider interface."""
+
     def __init__(
         self,
         model: str = "gpt-4.1-mini",
@@ -18,6 +20,8 @@ class OpenAIProvider(LLMProvider):
         temperature: float = 0.1,
         top_p: float | None = None,
     ):
+        """Create a configured OpenAI client."""
+
         from openai import OpenAI
 
         self._client = OpenAI(api_key=api_key or os.environ["OPENAI_API_KEY"])
@@ -27,6 +31,8 @@ class OpenAIProvider(LLMProvider):
         self.top_p = top_p
 
     def send(self, messages, tools):
+        """Send a normalized conversation and return a normalized response."""
+
         kwargs: dict = {
             "model": self._model,
             "messages": self._to_openai(messages),
@@ -43,10 +49,13 @@ class OpenAIProvider(LLMProvider):
         return self._from_openai(self._client.chat.completions.create(**kwargs))
     
     def _to_openai(self, messages):
+        """Convert internal message blocks into OpenAI chat payloads."""
+
         out = []
         for m in messages:
             results = [b for b in m.content if isinstance(b, ToolResultBlock)]
             if results:
+                # Tool results are sent as synthetic tool-role messages.
                 for b in results:
                     out.append({"role": "tool", "tool_call_id": b.tool_use_id, "content": b.content})
                 continue
@@ -65,6 +74,8 @@ class OpenAIProvider(LLMProvider):
         return out
     
     def _from_openai(self, completion):
+        """Map the OpenAI completion back to core response blocks."""
+
         choice = completion.choices[0]
         blocks = []
         if choice.message.content:
@@ -81,7 +92,11 @@ class OpenAIProvider(LLMProvider):
 
     @property
     def model(self) -> str:
+        """Return the configured model name."""
+
         return self._model
 
     def set_model(self, name: str) -> None:
+        """Switch to a different model for subsequent requests."""
+
         self._model = name

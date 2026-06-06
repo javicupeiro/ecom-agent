@@ -71,5 +71,3 @@ dmypy.json
 .DS_Store
 Thumbs.db
 .data/
-borrar/
-.claude

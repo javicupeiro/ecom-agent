@@ -12,10 +12,14 @@ from ecom_agent.tools.registry import tool
 
 @tool
 class WriteOrderTool(Tool):
+    """Create or update order records after validation."""
+
     name = "write_order"
     requires_permission = True
 
     def definition(self) -> ToolDef:
+        """Describe the order mutation tool to the model."""
+
         return ToolDef(
             name=self.name,
             description=(
@@ -40,6 +44,8 @@ class WriteOrderTool(Tool):
         )
 
     def execute(self, tool_input: dict, ctx) -> ToolResult:
+        """Validate the payload and write it to the orders database."""
+
         try:
             order = OrderInput(**tool_input)
         except ValidationError as exc:

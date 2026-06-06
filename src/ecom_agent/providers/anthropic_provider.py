@@ -13,6 +13,8 @@ from ecom_agent.providers.base import LLMProvider
 
 
 class AnthropicProvider(LLMProvider):
+    """Wrap the Anthropic messages API behind the provider interface."""
+
     def __init__(
         self,
         model: str = "claude-sonnet-4-6",
@@ -21,6 +23,8 @@ class AnthropicProvider(LLMProvider):
         temperature: float = 0.1,
         top_p: float | None = None,
     ):
+        """Create a configured Anthropic client."""
+
         import anthropic
 
         self._client = anthropic.Anthropic(api_key=api_key or os.environ["ANTHROPIC_API_KEY"])
@@ -30,6 +34,8 @@ class AnthropicProvider(LLMProvider):
         self.top_p = top_p
 
     def send(self, messages, tools):
+        """Send a normalized conversation and return a normalized response."""
+
         system = " ".join(m.text() for m in messages if m.role == "system")
         kwargs: dict = {
             "model": self._model,
@@ -50,6 +56,8 @@ class AnthropicProvider(LLMProvider):
         return self._from_api(self._client.messages.create(**kwargs))
 
     def _to_api(self, m):
+        """Convert one internal message into Anthropic content blocks."""
+
         content = []
         for b in m.content:
             if isinstance(b, TextBlock):
@@ -62,6 +70,8 @@ class AnthropicProvider(LLMProvider):
         return {"role": m.role, "content": content}
 
     def _from_api(self, raw):
+        """Map Anthropic response content into core response blocks."""
+
         blocks = []
         for b in raw.content:
             if b.type == "text":
@@ -76,7 +86,11 @@ class AnthropicProvider(LLMProvider):
 
     @property
     def model(self) -> str:
+        """Return the configured model name."""
+
         return self._model
 
     def set_model(self, name: str) -> None:
+        """Switch to a different model for subsequent requests."""
+
         self._model = name

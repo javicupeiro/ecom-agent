@@ -1,15 +1,4 @@
-"""Load prompt text from .md files co-located with the caller module.
-
-Usage::
-
-    from pathlib import Path
-    from ecom_agent.prompt_loader import load_prompt
-
-    _PROMPTS = Path(__file__).parent / "prompts"
-
-    text = load_prompt(_PROMPTS, "system", lang="es")
-    # → reads  <_PROMPTS>/es/system.md  (falls back to <_PROMPTS>/system.md)
-"""
+"""Load Markdown prompts with optional language-specific lookup."""
 
 from __future__ import annotations
 

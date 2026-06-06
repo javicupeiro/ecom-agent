@@ -11,6 +11,8 @@ from ecom_agent.providers.base import LLMProvider
 
 
 def _anthropic(s: Settings) -> LLMProvider:
+    """Build the Anthropic adapter from settings."""
+
     from ecom_agent.providers.anthropic_provider import AnthropicProvider
 
     return AnthropicProvider(
@@ -23,6 +25,8 @@ def _anthropic(s: Settings) -> LLMProvider:
 
 
 def _openai(s: Settings) -> LLMProvider:
+    """Build the OpenAI adapter from settings."""
+
     from ecom_agent.providers.openai_provider import OpenAIProvider
 
     return OpenAIProvider(
@@ -41,6 +45,8 @@ _BUILDERS: dict[str, Callable[[Settings], LLMProvider]] = {
 
 
 def build_provider(settings: Settings) -> LLMProvider:
+    """Build the configured provider or fail fast on unknown names."""
+
     try:
         return _BUILDERS[settings.llm.provider](settings)
     except KeyError:

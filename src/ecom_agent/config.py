@@ -19,6 +19,8 @@ from pydantic_settings import (
 
 
 class LlmCfg(BaseModel):
+    """Language model configuration."""
+
     provider: str = "anthropic"  # anthropic | openai
     name: str = "claude-sonnet-4-6"
     max_tokens: int = 1024
@@ -27,13 +29,19 @@ class LlmCfg(BaseModel):
 
 
 class AgentCfg(BaseModel):
+    """Conversation loop settings."""
+
     max_steps: int = 6
     default_language: str = "es"
 
 class DbCfg(BaseModel):
+    """Database storage settings."""
+
     path: str = "./.data/orders.db"
 
 class RagCfg(BaseModel):
+    """Knowledge base indexing and retrieval settings."""
+
     kb_root: str = "SaborMix"
     collection: str = "sabormix"
     persist_dir: str = "./.data/chroma"
@@ -41,11 +49,15 @@ class RagCfg(BaseModel):
     top_k: int = 10
 
 class CompactionCfg(BaseModel):
+    """Conversation history compaction settings."""
+
     strategy: str = "none"   # none | sliding | summarize
     threshold: int = 20
     keep_recent: int = 6
 
 class Settings(BaseSettings):
+    """Top-level application settings object."""
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_nested_delimiter="__",
@@ -69,10 +81,12 @@ class Settings(BaseSettings):
         dotenv_settings: PydanticBaseSettingsSource,
         file_secret_settings: PydanticBaseSettingsSource,
     ) -> tuple[PydanticBaseSettingsSource, ...]:
-        # Order defines precedence (first wins).
+        """Define the settings source order from highest to lowest priority."""
         return (init_settings, env_settings, dotenv_settings, TomlConfigSettingsSource(settings_cls))
 
 
 @lru_cache
 def get_settings() -> Settings:
+    """Return a cached settings instance for the process."""
+
     return Settings()

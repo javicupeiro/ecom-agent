@@ -13,6 +13,8 @@ STATUSES = {"processing", "shipped", "delivered", "cancelled"}
 
 
 class OrderInput(BaseModel):
+    """Validated payload accepted by the order write tool."""
+
     order_id: str
     customer_name: Optional[str] = None
     customer_surname: Optional[str] = None
@@ -25,6 +27,8 @@ class OrderInput(BaseModel):
     @field_validator("order_id")
     @classmethod
     def _check_id(cls, v: str) -> str:
+        """Normalize and validate the order identifier."""
+
         v = v.strip().upper()
         if not ORDER_RE.match(v):
             raise ValueError("order_id must look like ORD-123456")
@@ -33,6 +37,8 @@ class OrderInput(BaseModel):
     @field_validator("purchase_date", "ship_date")
     @classmethod
     def _check_date(cls, v: Optional[str]) -> Optional[str]:
+        """Validate date strings when they are provided."""
+
         if v and not DATE_RE.match(v):
             raise ValueError("dates must be YYYY-MM-DD")
         return v
@@ -40,6 +46,8 @@ class OrderInput(BaseModel):
     @field_validator("status")
     @classmethod
     def _check_status(cls, v: Optional[str]) -> Optional[str]:
+        """Validate the order status when it is provided."""
+
         if v and v not in STATUSES:
             raise ValueError(f"status must be one of {sorted(STATUSES)}")
         return v

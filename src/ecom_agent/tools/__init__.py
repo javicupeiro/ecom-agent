@@ -1,3 +1,5 @@
+"""Import tool modules so they self-register in the default registry."""
+
 from . import query_orders  # noqa: F401
 from . import search_knowledge_base  # noqa: F401
 from . import write_order  # noqa: F401

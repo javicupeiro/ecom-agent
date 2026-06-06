@@ -7,16 +7,22 @@ from collections.abc import Callable
 
 
 class PermissionPolicy(ABC):
+    """Decides whether a tool call is authorized."""
+
     @abstractmethod
     def allows(self, tool_name: str, tool_input: dict) -> bool: ...
 
 
 class AlwaysAllow(PermissionPolicy):
+    """Allow every tool call."""
+
     def allows(self, tool_name: str, tool_input: dict) -> bool:
         return True
 
 
 class AllowList(PermissionPolicy):
+    """Allow only explicitly listed tool names."""
+
     def __init__(self, names) -> None:
         self.names = set(names)
 

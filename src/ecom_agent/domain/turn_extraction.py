@@ -6,6 +6,8 @@ from pydantic import BaseModel, field_validator
 
 
 class TurnExtraction(BaseModel):
+    """Structured metadata inferred from a single customer message."""
+
     order_number: str | None = None
     problem_category: str | None = None
     problem_description: str | None = None
@@ -15,6 +17,8 @@ class TurnExtraction(BaseModel):
     @field_validator("order_number")
     @classmethod
     def _normalize_order_number(cls, value: str | None) -> str | None:
+        """Normalize the extracted order number."""
+
         if value is None:
             return None
         normalized = value.strip().upper()
@@ -23,6 +27,8 @@ class TurnExtraction(BaseModel):
     @field_validator("problem_category", "problem_description", "urgency_level")
     @classmethod
     def _normalize_text(cls, value: str | None) -> str | None:
+        """Strip extracted text fields and convert blanks to None."""
+
         if value is None:
             return None
         normalized = value.strip()
@@ -31,4 +37,6 @@ class TurnExtraction(BaseModel):
     @field_validator("frustration")
     @classmethod
     def _clamp_frustration(cls, value: float) -> float:
+        """Clamp the frustration score to the supported range."""
+
         return max(0.0, min(1.0, float(value)))

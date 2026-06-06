@@ -10,6 +10,8 @@ from ecom_agent.providers.base import LLMProvider
 
 
 def build_compactor(settings: Settings, provider: LLMProvider) -> CompactionStrategy:
+    """Build the configured conversation compaction strategy."""
+
     cfg = settings.compaction
     if cfg.strategy == "sliding":
         return SlidingWindow(keep_last=cfg.keep_recent)

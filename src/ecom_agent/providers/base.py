@@ -8,6 +8,8 @@ from ecom_agent.domain.types import Message, Response
 
 
 class LLMProvider(ABC):
+    """Common interface implemented by every model provider adapter."""
+
     @abstractmethod
     def send(self, messages, tools) -> Response:
         """Send the conversation context and return a generic response."""

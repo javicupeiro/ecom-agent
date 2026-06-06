@@ -9,10 +9,14 @@ from ecom_agent.tools.registry import tool
 
 @tool
 class RememberTool(Tool):
+    """Persist a fact or preference for later recall."""
+
     name = "remember"
     requires_permission = False
 
     def definition(self) -> ToolDef:
+        """Describe the memory write tool to the model."""
+
         return ToolDef(
             name=self.name,
             description=(
@@ -30,6 +34,8 @@ class RememberTool(Tool):
         )
 
     def execute(self, tool_input: dict, ctx) -> ToolResult:
+        """Validate and store one memory record."""
+
         content = (tool_input.get("content") or "").strip()
         if not content:
             return ToolResult("remember: 'content' is required", is_error=True)

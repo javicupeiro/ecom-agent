@@ -8,6 +8,8 @@ from ecom_agent.tools.registry import tool
 
 
 def _format(o: dict) -> str:
+    """Render one order row as a compact human-readable line."""
+
     ship = o["ship_date"] or "not shipped yet"
     return (f"{o['order_id']} · {o['customer_name']} {o['customer_surname']} · "
             f"{o['product']} · status={o['status']} · purchased {o['purchase_date']} · "
@@ -16,10 +18,14 @@ def _format(o: dict) -> str:
 
 @tool
 class QueryOrdersTool(Tool):
+    """Read-only order lookup tool."""
+
     name = "query_orders"
     requires_permission = False
 
     def definition(self) -> ToolDef:
+        """Describe the tool to the model."""
+
         return ToolDef(
             name=self.name,
             description=(
@@ -36,6 +42,8 @@ class QueryOrdersTool(Tool):
         )
 
     def execute(self, tool_input: dict, ctx) -> ToolResult:
+        """Query orders by id or surname."""
+
         order_id = (tool_input.get("order_id") or "").strip().upper()
         surname = (tool_input.get("surname") or "").strip()
         if order_id:

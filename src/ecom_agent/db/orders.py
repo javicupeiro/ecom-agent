@@ -35,17 +35,25 @@ SEED = [
 
 
 class OrdersDB:
+    """Persist and query order records."""
+
     def __init__(self, path: str | Path = "./.data/orders.db") -> None:
+        """Create the database file and initialize the schema if needed."""
+
         self.path = Path(path)
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self._init()
 
     def _conn(self) -> sqlite3.Connection:
+        """Open a row-mapped SQLite connection."""
+
         conn = sqlite3.connect(self.path)
         conn.row_factory = sqlite3.Row
         return conn
 
     def _init(self) -> None:
+        """Create the schema and seed sample data on first run."""
+
         with self._conn() as conn:
             conn.executescript(SCHEMA)
             if conn.execute("SELECT COUNT(*) FROM orders").fetchone()[0] == 0:
@@ -53,11 +61,15 @@ class OrdersDB:
 
     # --- reads ---
     def get(self, order_id: str) -> dict[str, Any] | None:
+        """Return one order by id, or None if it does not exist."""
+
         with self._conn() as conn:
             row = conn.execute("SELECT * FROM orders WHERE order_id = ?", (order_id,)).fetchone()
             return dict(row) if row else None
 
     def find_by_surname(self, surname: str) -> list[dict[str, Any]]:
+        """Return all orders that match a customer surname."""
+
         with self._conn() as conn:
             rows = conn.execute(
                 "SELECT * FROM orders WHERE lower(customer_surname) = lower(?)", (surname,)
@@ -66,6 +78,8 @@ class OrdersDB:
 
     # --- write ---
     def upsert(self, order: dict[str, Any]) -> str:
+        """Insert a new order or merge fields into an existing one."""
+
         existing = self.get(order["order_id"])
         with self._conn() as conn:
             if existing:

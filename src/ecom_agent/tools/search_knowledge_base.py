@@ -9,10 +9,14 @@ from ecom_agent.tools.registry import tool
 
 @tool
 class SearchKnowledgeBaseTool(Tool):
+    """Retrieve passages from the localized knowledge base."""
+
     name = "search_knowledge_base"
     requires_permission = False
 
     def definition(self) -> ToolDef:
+        """Describe the retrieval tool to the model."""
+
         return ToolDef(
             name=self.name,
             description=(
@@ -36,6 +40,8 @@ class SearchKnowledgeBaseTool(Tool):
         )
 
     def execute(self, tool_input: dict, ctx) -> ToolResult:
+        """Search the knowledge base with the current conversation language."""
+
         area = tool_input.get("area") or None
         hits = ctx.kb.search(tool_input.get("query", ""), lang=ctx.lang, area=area)
         if not hits:

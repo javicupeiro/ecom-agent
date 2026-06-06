@@ -1,3 +1,5 @@
+"""FastAPI entrypoint for the e-commerce support agent."""
+
 from __future__ import annotations
 
 from fastapi import FastAPI
@@ -36,14 +38,19 @@ _sessions: dict[str, Conversation] = {}
 
 @app.get("/")
 def index() -> FileResponse:
+    """Serve the single-page UI."""
     return FileResponse("ui/index.html")
 
 class ChatIn(BaseModel):
+    """Incoming chat payload from the web UI."""
+
     session_id: str = "default"
     message: str
     lang: str | None = None
 
 def _conversation(session_id: str, lang: str) -> Conversation:
+    """Return the cached conversation for a session-language pair."""
+
     conv = _sessions.get(session_id)
     if conv is None or conv.lang != lang:
         conv = Conversation(
@@ -57,6 +64,8 @@ def _conversation(session_id: str, lang: str) -> Conversation:
 
 @app.post("/chat")
 def chat(body: ChatIn) -> dict:
+    """Process one user turn and return the assistant reply plus debug data."""
+
     conv = _conversation(body.session_id, body.lang or settings.agent.default_language)
     result = conv.send(body.message)
     return {
@@ -74,6 +83,8 @@ def chat(body: ChatIn) -> dict:
 
 @app.post("/summary")
 def summary(session_id: str = "default") -> dict:
+    """Return a conversation summary for the requested session."""
+
     conv = _sessions.get(session_id)
     if conv is None:
         return {"summary": "", "session_id": session_id}

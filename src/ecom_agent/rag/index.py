@@ -18,6 +18,8 @@ LANGS = ("es", "en")
 
 @dataclass
 class Hit:
+    """Retrieved knowledge base passage plus its metadata."""
+
     title: str
     area: str
     lang: str
@@ -40,6 +42,8 @@ def _chunks(text: str) -> list[str]:
 
 
 class KnowledgeBase:
+    """Index and query localized knowledge base documents."""
+
     def __init__(
         self,
         persist_dir: str,
@@ -48,12 +52,14 @@ class KnowledgeBase:
         embedding_model: str = "text-embedding-3-small",
         top_k: int = 3,
     ) -> None:
+        """Open or create the persistent Chroma collection."""
+
         self.top_k = top_k
         embed = embedding_functions.OpenAIEmbeddingFunction(
             api_key=openai_api_key, model_name=embedding_model
         )
         client = chromadb.PersistentClient(path=persist_dir)
-        # The embedding function is bound to the collection on create AND reopen.
+        # Rebind the embedding function on reopen so queries use the same encoder.
         self._collection = client.get_or_create_collection(
             name=collection, embedding_function=embed, metadata={"hnsw:space": "cosine"}
         )
@@ -78,6 +84,8 @@ class KnowledgeBase:
     def search(
         self, query: str, lang: str = "es", k: int | None = None, area: str | None = None
     ) -> list[Hit]:
+        """Search the knowledge base using language and optional area filters."""
+
         where: dict = {"lang": lang}
         if area:
             where = {"$and": [{"lang": lang}, {"area": area}]}

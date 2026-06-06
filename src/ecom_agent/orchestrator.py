@@ -1,7 +1,4 @@
-"""Outer loop (one REPL 'eval' per user message) + inner agent loop (the model
-requests tools until it stops). Returns a DebugTrace per turn — the data the
-front debug panel renders.
-"""
+"""Conversation loop that coordinates model calls, tools, and tracing."""
 
 from __future__ import annotations
 
@@ -22,6 +19,8 @@ _PROMPTS_DIR = Path(__file__).parent / "prompts"
 
 @dataclass
 class DebugTrace:
+    """Structured diagnostics for one user turn."""
+
     provider_calls: int = 0
     tools_used: list[str] = field(default_factory=list)
     usage: Usage = field(default_factory=Usage)
@@ -32,12 +31,16 @@ class DebugTrace:
 
 @dataclass
 class TurnResult:
+    """Final assistant reply plus debug trace for a turn."""
+
     reply: str
     trace: DebugTrace
 
 
 @dataclass
 class Ctx:
+    """Shared runtime dependencies passed to tools."""
+
     lang: str = "es"  
     db: object | None = None      # OrdersDB
     kb: object | None = None      # KnowledgeBase
@@ -46,6 +49,8 @@ class Ctx:
 
 
 class Conversation:
+    """Owns the message history and executes the agent loop."""
+
     def __init__(
         self,
         provider: LLMProvider,
@@ -61,6 +66,8 @@ class Conversation:
         compactor=None,
         max_steps: int = 6,
     ) -> None:
+        """Initialize a conversation with its provider, tools, and stores."""
+
         self.provider = provider
         self.registry = registry or default_registry
         self.policy = policy or AlwaysAllow()
@@ -77,6 +84,8 @@ class Conversation:
         self.compactor = compactor or NoCompaction()
 
     def _ctx(self) -> Ctx:
+        """Build the tool execution context for the current session."""
+
         return Ctx(
             lang=self.lang,
             db=self.db,
@@ -86,7 +95,7 @@ class Conversation:
         )
     
     def _extract_turn_data(self, user_text: str) -> TurnExtraction:
-        """One-shot call to extract structured customer metadata. Never raises."""
+        """Extract structured customer metadata without interrupting the loop."""
         try:
             instr = load_prompt(_PROMPTS_DIR, "extract_turn_data", self.lang)
             resp = self.provider.send([Message.system(instr), Message.user(user_text)], [])
@@ -95,12 +104,13 @@ class Conversation:
             return TurnExtraction()
 
     def send(self, user_text: str) -> TurnResult:
-        """One outer-loop eval: feed user input, run inner agent loop until the model stops."""
+        """Run one user turn until the model answers or hits the step limit."""
         self.messages.append(Message.user(user_text))
         if self.store:
             self.store.save(self.session_id, {"role": "user", "text": user_text})
         trace = DebugTrace()
         for _ in range(self.max_steps):
+            # Compact before each provider call so the model always sees a valid history.
             self.messages = self.compactor.compact(self.messages)
             resp = self.provider.send(self.messages, self.registry.definitions())
             trace.provider_calls += 1
@@ -127,6 +137,7 @@ class Conversation:
 
             result_blocks = []
             for u in uses:
+                # Tool failures are converted to tool results by the registry.
                 tr = self.registry.dispatch(u.name, u.input, self._ctx(), self.policy)
                 trace.tools_used.append(u.name)
                 trace.steps.append(
@@ -147,6 +158,8 @@ class Conversation:
         return TurnResult(reply="(step limit reached)", trace=trace)
     
     def summarize(self) -> dict:
+        """Summarize the non-system conversation history for the UI."""
+
         body = [m for m in self.messages if m.role != "system"]
         summarize_instr = load_prompt(_PROMPTS_DIR, "summarize")
         prompt = [
