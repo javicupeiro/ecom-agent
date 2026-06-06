@@ -75,9 +75,16 @@ Example:
 ```env
 ANTHROPIC_API_KEY=your_anthropic_key
 OPENAI_API_KEY=your_openai_key
+ELEVENLAB_API_KEY=your_elevenlabs_key
 ```
 
 Important note: the retrieval layer currently uses OpenAI embeddings through Chroma, so `OPENAI_API_KEY` is required for knowledge-base ingestion and search even if the chat provider is set to Anthropic.
+
+Audio-specific notes:
+
+- `OPENAI_API_KEY` is also used by speech-to-text for customer audio uploads.
+- `ELEVENLAB_API_KEY` enables text-to-speech replies.
+- The setting name is intentionally `ELEVENLAB_API_KEY` in this repository to match `Settings.elevenlab_api_key`.
 
 ### Configure tunables
 
@@ -132,7 +139,18 @@ The FastAPI app serves both:
 - the JSON API used by the frontend,
 - the static browser UI from `ui/`.
 
-### 3. Optional smoke check
+### 3. Audio features in the UI
+
+The browser UI now supports both spoken replies and spoken customer input.
+
+- The `Texto / Voz` toggle controls how the assistant answers. `Texto` is the default.
+- In `Voz` mode, the backend rewrites the final reply into listening-first copy, synthesizes it with ElevenLabs, and returns both the text reply and the audio clip.
+- The selected voice depends on the active UI language: Spanish uses a female Spanish profile, English uses a female US English profile.
+- The voice player in the chat supports play/stop, seek, and 10-second forward/back jumps.
+- The microphone in the composer lets the user record audio, pause/resume, delete it, send it directly, and replay the sent clip from the chat after upload.
+- Audio uploads are transcribed server-side and continue through the exact same agent pipeline as normal text turns.
+
+### 4. Optional smoke check
 
 To verify that the configured provider can answer a trivial prompt:
 
@@ -160,7 +178,9 @@ The current tests cover the main local building blocks:
 - compaction strategies,
 - orders database operations,
 - provider normalization,
+- speech-to-text normalization,
 - structured turn extraction,
+- voice synthesis fallback behavior,
 - write-order tool behavior.
 
 ## How The System Works
@@ -168,14 +188,34 @@ The current tests cover the main local building blocks:
 At runtime, the request flow is:
 
 1. the browser UI sends a message to `POST /chat`,
-2. FastAPI resolves or creates a session-bound `Conversation`,
-3. the conversation sends the current message history to the configured model provider,
-4. if the model requests tools, the tool registry executes them under a permission policy,
-5. tool results are fed back into the conversation loop,
-6. when the model emits a final answer, the API returns the reply plus a structured trace,
-7. the UI renders both the answer and the internal execution trace.
+2. optionally, the browser UI can upload recorded audio to `POST /chat/audio`,
+3. FastAPI resolves or creates a session-bound `Conversation`,
+4. audio turns are first transcribed to text and then follow the normal turn flow,
+5. the conversation sends the current message history to the configured model provider,
+6. if the model requests tools, the tool registry executes them under a permission policy,
+7. tool results are fed back into the conversation loop,
+8. when the model emits a final answer, the API returns the reply plus a structured trace,
+9. if the UI requested voice output, the backend also synthesizes a spoken version of the final answer,
+10. the UI renders the answer, the optional audio player, and the internal execution trace.
 
 This loop is implemented to make reasoning visible. The user does not just receive a final answer; the frontend can also inspect how many provider calls were made, which tools were used, and what structured metadata was extracted from the turn.
+
+## API Overview
+
+The frontend currently uses three HTTP endpoints:
+
+- `GET /` serves the static chat UI.
+- `POST /chat` accepts a text turn with `session_id`, `message`, `lang`, and `response_mode` (`text` or `voice`).
+- `POST /chat/audio` accepts a recorded clip with `session_id`, `audio_base64`, `mime_type`, `filename`, `lang`, and `response_mode`.
+- `POST /summary` returns a summary for the current session.
+
+Both `POST /chat` and `POST /chat/audio` return a normalized payload containing:
+
+- `reply`: the final assistant text,
+- `input_mode`: `text` or `audio`,
+- `input_text`: the original message or transcript,
+- `output`: either a text payload or a voice payload with base64 audio,
+- `trace`: provider calls, tool usage, token accounting, and extraction metadata.
 
 ## Architecture
 
@@ -199,6 +239,7 @@ The application entrypoint. It wires together settings, provider, database, know
 
 - `GET /` for the UI,
 - `POST /chat` for one conversational turn,
+- `POST /chat/audio` for customer audio uploads,
 - `POST /summary` for a session summary.
 
 This file should stay thin: it composes services, but does not implement the agent logic itself.
@@ -345,6 +386,28 @@ Controls how chat history is reduced before provider calls.
 - `threshold`: when summarization-based compaction should activate
 - `keep_recent`: number of recent messages to preserve verbatim
 
+### `[voice]`
+
+Controls text-to-speech output.
+
+- `model_id`: ElevenLabs model used for synthesis
+- `audio_format`: output codec and bitrate returned to the UI
+- `spanish_voice_id`: preferred Spanish voice ID
+- `english_voice_id`: preferred English voice ID
+- `spanish_voice_label`: label shown in the UI for Spanish playback
+- `english_voice_label`: label shown in the UI for English playback
+- `stability`, `similarity_boost`, `style`, `use_speaker_boost`: ElevenLabs voice settings
+- `timeout_seconds`: network timeout for synthesis requests
+
+If the configured voice is unavailable for the current ElevenLabs plan, the app retries with a public fallback voice instead of failing the whole turn.
+
+### `[stt]`
+
+Controls speech-to-text for customer audio input.
+
+- `model`: OpenAI transcription model used by `POST /chat/audio`
+- `timeout_seconds`: network timeout for transcription requests
+
 ## Other Important Folders
 
 ### `SaborMix/`
@@ -363,6 +426,7 @@ Contains the static frontend served by FastAPI.
 
 - `index.html` defines the page shell.
 - `app.js` manages chat state, sends API requests, switches language, and renders execution traces.
+- `app.js` also handles voice playback, audio recording, and upload/transcription flows.
 - `styles.css` defines the presentation.
 
 This folder is intentionally separate from `src/` because it is a static client, not part of the Python package.
@@ -384,7 +448,9 @@ Contains the automated test suite.
 - `test_compaction.py` checks history compaction strategies.
 - `test_orders_db.py` covers SQLite persistence behavior.
 - `test_provider.py` checks provider abstractions.
+- `test_stt.py` validates speech-to-text handling.
 - `test_turn_extraction.py` validates structured extraction behavior.
+- `test_voice.py` validates voice adaptation and fallback behavior.
 - `test_write_order.py` covers write-side tool behavior.
 
 Tests live outside `src/` to keep production code and verification code clearly separated.
