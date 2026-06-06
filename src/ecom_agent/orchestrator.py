@@ -37,6 +37,7 @@ class TurnResult:
 class Ctx:
     lang: str = "es"  
     db: object | None = None      # OrdersDB
+    kb: object | None = None        # KnowledgeBase
     session_id: str = "default"
 
 
@@ -49,6 +50,7 @@ class Conversation:
         policy: PermissionPolicy | None = None,
         lang: str = "es",
         db=None,
+        kb=None,
         session_id: str = "default",
         system_prompt: str = SYSTEM_PROMPT,
         max_steps: int = 6,
@@ -58,6 +60,7 @@ class Conversation:
         self.policy = policy or AlwaysAllow()
         self.lang = lang
         self.db = db
+        self.kb = kb
         self.session_id = session_id
         self.max_steps = max_steps
         self.messages: list[Message] = [Message.system(system_prompt)]
@@ -67,6 +70,7 @@ class Conversation:
         return Ctx(
             lang=self.lang,
             db=self.db,
+            kb=self.kb,
             session_id=self.session_id,
         )
     

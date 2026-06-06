@@ -10,6 +10,7 @@ from ecom_agent.config import get_settings
 from ecom_agent.db.orders import OrdersDB
 from ecom_agent.providers.factory import build_provider
 from ecom_agent.orchestrator import Conversation
+from ecom_agent.rag.index import KnowledgeBase
 
 app = FastAPI(title="SaborMix Agent")
 app.add_middleware(
@@ -20,6 +21,10 @@ app.mount("/static", StaticFiles(directory="ui"), name="static")
 settings = get_settings()
 provider = build_provider(settings)
 db = OrdersDB(settings.db.path)
+kb = KnowledgeBase(
+    settings.rag.persist_dir, settings.rag.collection, settings.openai_api_key,
+    settings.rag.embedding_model, settings.rag.top_k,
+)
 
 SYSTEM_PROMPT = (
     "You are a helpful assistant for SaborMix, a kitchen robot brand. "
@@ -42,7 +47,7 @@ def _conversation(session_id: str, lang: str) -> Conversation:
     conv = _sessions.get(session_id)
     if conv is None or conv.lang != lang:
         conv = Conversation(
-            provider, db=db, lang=lang, session_id=session_id,
+            provider, db=db, kb=kb, lang=lang, session_id=session_id,
             max_steps=settings.agent.max_steps,
         )
         _sessions[session_id] = conv

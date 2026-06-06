@@ -33,6 +33,13 @@ class AgentCfg(BaseModel):
 class DbCfg(BaseModel):
     path: str = "./.data/orders.db"
 
+class RagCfg(BaseModel):
+    kb_root: str = "SaborMix"
+    collection: str = "sabormix"
+    persist_dir: str = "./.data/chroma"
+    embedding_model: str = "text-embedding-3-small"
+    top_k: int = 3
+
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
         env_file=".env",
@@ -46,6 +53,7 @@ class Settings(BaseSettings):
     llm: LlmCfg = LlmCfg()
     agent: AgentCfg = AgentCfg()
     db: DbCfg = DbCfg()
+    rag: RagCfg = RagCfg()
 
     @classmethod
     def settings_customise_sources(

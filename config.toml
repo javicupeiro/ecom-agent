@@ -13,3 +13,10 @@ default_language = "es"       # the UI toggle overrides this per request
 
 [db]
 path = "./.data/orders.db"
+
+[rag]
+kb_root = "SaborMix"
+collection = "sabormix"
+persist_dir = "./.data/chroma"
+embedding_model = "text-embedding-3-small"
+top_k = 3
