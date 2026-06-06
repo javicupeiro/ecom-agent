@@ -31,11 +31,6 @@ kb = KnowledgeBase(
 store = JSONFileStore()
 compactor = build_compactor(settings, provider)
 
-SYSTEM_PROMPT = (
-    "You are a helpful assistant for SaborMix, a kitchen robot brand. "
-    "Always reply in the customer's language."
-)
-
 _sessions: dict[str, Conversation] = {}
 
 
@@ -73,6 +68,7 @@ def chat(body: ChatIn) -> dict:
             "usage": result.trace.usage.model_dump(),
             "calls": result.trace.calls,
             "steps": result.trace.steps,
+            "extraction": result.trace.extraction.model_dump(),
         },
     }
 

@@ -33,6 +33,15 @@ const COPY = {
     statCalls: "Llamadas",
     statTokens: "Tokens",
     statTools: "Herramientas",
+    statFrustration: "Frustración",
+    eventExtraction: "extraccion",
+    eventExtractionLabel: "Parámetros extraídos",
+    extractionCardTitle: "Resumen extraído",
+    extractionOrderNumber: "Número de pedido",
+    extractionProblemCategory: "Categoría",
+    extractionProblemDescription: "Descripción",
+    extractionUrgencyLevel: "Urgencia",
+    extractionMissing: "sin dato",
     userMeta: "Tú",
     agentMeta: "SaborMix",
     turn: "Turno",
@@ -90,6 +99,15 @@ const COPY = {
     statCalls: "Calls",
     statTokens: "Tokens",
     statTools: "Tools",
+    statFrustration: "Frustration",
+    eventExtraction: "extraction",
+    eventExtractionLabel: "Extracted parameters",
+    extractionCardTitle: "Extracted summary",
+    extractionOrderNumber: "Order number",
+    extractionProblemCategory: "Category",
+    extractionProblemDescription: "Description",
+    extractionUrgencyLevel: "Urgency",
+    extractionMissing: "missing",
     userMeta: "You",
     agentMeta: "SaborMix",
     turn: "Turn",
@@ -145,9 +163,11 @@ const el = {
   statCalls: document.getElementById("stat-calls"),
   statTokens: document.getElementById("stat-tokens"),
   statTools: document.getElementById("stat-tools"),
+  statFrustration: document.getElementById("stat-frustration"),
   statCallsWrap: document.getElementById("stat-calls").parentElement,
   statTokensWrap: document.getElementById("stat-tokens").parentElement,
   statToolsWrap: document.getElementById("stat-tools").parentElement,
+  statFrustrationWrap: document.getElementById("stat-frustration").parentElement,
   langMenu: document.getElementById("lang-menu"),
   langTrigger: document.getElementById("lang-trigger"),
   langTriggerLabel: document.getElementById("lang-trigger-label"),
@@ -341,6 +361,68 @@ function modelCallDetail(call) {
 
 // ───────── Chat rendering ─────────
 
+
+function extractionDetail(extraction) {
+  const info = extraction || {};
+  const frustrationValue = typeof info.frustration === "number"
+    ? `${Math.round(info.frustration * 100)}%`
+    : t().extractionMissing;
+  return [
+    `${t().extractionOrderNumber}: ${info.order_number || t().extractionMissing}`,
+    `${t().extractionProblemCategory}: ${info.problem_category || t().extractionMissing}`,
+    `${t().extractionProblemDescription}: ${info.problem_description || t().extractionMissing}`,
+    `${t().statFrustration}: ${frustrationValue}`,
+    `${t().extractionUrgencyLevel}: ${info.urgency_level || t().extractionMissing}`,
+  ].join("\n");
+}
+
+function extractionPillClass(frustration) {
+  if (frustration >= 0.7) return "high";
+  if (frustration >= 0.4) return "medium";
+  return "low";
+}
+
+function renderExtractionCard(extraction) {
+  const info = extraction || {};
+  const wrap = node("section", "extraction-card");
+  const title = node("div", "extraction-card-title", t().extractionCardTitle);
+  const grid = node("div", "extraction-grid");
+  const frustration = typeof info.frustration === "number" ? info.frustration : 0;
+  const frustrationPct = `${Math.round(frustration * 100)}%`;
+
+  const items = [
+    [t().extractionOrderNumber, info.order_number || t().extractionMissing],
+    [t().extractionProblemCategory, info.problem_category || t().extractionMissing],
+    [t().extractionProblemDescription, info.problem_description || t().extractionMissing],
+    [t().extractionUrgencyLevel, info.urgency_level || t().extractionMissing],
+  ];
+
+  for (const [label, value] of items) {
+    const item = node("div", "extraction-item");
+    item.appendChild(node("div", "extraction-label", label));
+    item.appendChild(node("div", "extraction-value", value));
+    grid.appendChild(item);
+  }
+
+  const frustrationItem = node("div", "extraction-item extraction-item-frustration");
+  frustrationItem.appendChild(node("div", "extraction-label", t().statFrustration));
+  const frustrationRow = node("div", "extraction-frustration-row");
+  const pill = node(
+    "span",
+    `extraction-pill ${extractionPillClass(frustration)}`,
+    frustrationPct,
+  );
+  const meter = node("div", "extraction-meter");
+  const fill = node("div", `extraction-meter-fill ${extractionPillClass(frustration)}`);
+  fill.style.width = frustrationPct;
+  meter.appendChild(fill);
+  frustrationRow.append(pill, meter);
+  frustrationItem.appendChild(frustrationRow);
+  grid.appendChild(frustrationItem);
+
+  wrap.append(title, grid);
+  return wrap;
+}
 function addBubble(role, text, { error = false } = {}) {
   if (el.empty) el.empty.remove();
   const bubble = node("div", `bubble ${role}${error ? " error" : ""}`);
@@ -397,6 +479,7 @@ function renderTrace(userText, data) {
   const steps = trace.steps || [];
   const traceCalls = trace.calls || [];
   const calls = trace.provider_calls || 0;
+  const extraction = trace.extraction || null;
 
   const turn = node("div", "trace-turn");
 
@@ -415,6 +498,9 @@ function renderTrace(userText, data) {
   turn.appendChild(head);
 
   const body = node("div", "trace-turn-body");
+  if (extraction) {
+    body.appendChild(renderExtractionCard(extraction));
+  }
   const events = node("div", "trace-events");
 
   events.appendChild(evt(t().eventUser, "request", t().eventUserLabel, { detail: userText }));
@@ -455,6 +541,14 @@ function renderTrace(userText, data) {
     }
   }
 
+  if (extraction) {
+    events.appendChild(
+      evt(t().eventExtraction, "llm", t().eventExtractionLabel, {
+        detail: extractionDetail(extraction),
+      }),
+    );
+  }
+
   if (data.error) {
     events.appendChild(evt(t().eventError, "error", t().eventErrorLabel, { detail: data.error }));
   } else {
@@ -474,6 +568,13 @@ function renderTrace(userText, data) {
   el.statCalls.textContent = state.totals.calls;
   el.statTokens.textContent = `${state.totals.inTokens} / ${state.totals.outTokens}`;
   el.statTools.textContent = state.totals.tools;
+
+  const frustration = typeof extraction?.frustration === "number" ? extraction.frustration : null;
+  if (frustration !== null) {
+    const pct = Math.round(frustration * 100);
+    const color = frustration < 0.4 ? "var(--green, #4ade80)" : frustration < 0.7 ? "var(--yellow, #facc15)" : "var(--red, #f87171)";
+    el.statFrustration.innerHTML = `<span style="color:${color};font-weight:600">${pct}%</span>`;
+  }
 
   const model = data.model || trace.model;
   if (model) el.modelPill.textContent = model;
@@ -574,6 +675,7 @@ function clearTraces() {
   el.statCalls.textContent = "0";
   el.statTokens.textContent = "0 / 0";
   el.statTools.textContent = "0";
+  el.statFrustration.textContent = "—";
 }
 
 function applyLanguage(copyChanged = false) {
@@ -600,6 +702,7 @@ function applyLanguage(copyChanged = false) {
   el.statCallsWrap.firstChild.textContent = `${copy.statCalls} `;
   el.statTokensWrap.firstChild.textContent = `${copy.statTokens} `;
   el.statToolsWrap.firstChild.textContent = `${copy.statTools} `;
+  el.statFrustrationWrap.firstChild.textContent = `${copy.statFrustration} `;
   el.langTrigger.title = copy.langMenuTitle;
   el.langTriggerLabel.textContent = copy.langLabel;
   for (const option of el.langOptions) {

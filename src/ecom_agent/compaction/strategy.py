@@ -6,9 +6,13 @@ its tool_result (the API would return a 400). `Summarize` doubles as the recap.
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from pathlib import Path
 
 from ecom_agent.domain.types import Message, ToolResultBlock, ToolUseBlock
 from ecom_agent.providers.base import LLMProvider
+from ecom_agent.prompt_loader import load_prompt
+
+_PROMPTS_DIR = Path(__file__).parent / "prompts"
 
 
 def _has(msg: Message, block_type) -> bool:
@@ -64,8 +68,9 @@ class Summarize(CompactionStrategy):
         k = safe_split_point(body, len(body) - self.keep_recent)
         older, recent = body[:k], body[k:]
         transcript = "\n".join(f"{m.role}: {m.text()}" for m in older if m.text())
+        compact_instr = load_prompt(_PROMPTS_DIR, "summarize_compact")
         prompt = [
-            Message.system("Summarize the conversation concisely, keeping extracted data."),
+            Message.system(compact_instr),
             Message.user(transcript),
         ]
         summary = Message.system("Summary so far:\n" + self.provider.send(prompt, []).text())

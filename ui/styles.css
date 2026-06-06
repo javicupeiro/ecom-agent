@@ -701,6 +701,117 @@ body {
   scrollbar-gutter: stable both-edges;
 }
 
+.extraction-card {
+  margin: 14px 14px 0;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background:
+    linear-gradient(180deg, rgba(42, 76, 255, 0.04) 0%, rgba(42, 76, 255, 0.015) 100%),
+    var(--panel-2);
+}
+
+.extraction-card-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+  margin-bottom: 10px;
+}
+
+.extraction-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.extraction-item {
+  min-width: 0;
+  padding: 10px 11px;
+  border-radius: 10px;
+  background: white;
+  border: 1px solid rgba(17, 20, 26, 0.06);
+}
+
+.extraction-item-frustration {
+  grid-column: 1 / -1;
+}
+
+.extraction-label {
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  margin-bottom: 6px;
+}
+
+.extraction-value {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text);
+  line-height: 1.45;
+  word-break: break-word;
+}
+
+.extraction-frustration-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.extraction-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 56px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.extraction-pill.low {
+  background: var(--ok-bg);
+  color: var(--ok);
+}
+
+.extraction-pill.medium {
+  background: var(--warn-bg);
+  color: var(--warn);
+}
+
+.extraction-pill.high {
+  background: var(--danger-bg);
+  color: var(--danger);
+}
+
+.extraction-meter {
+  position: relative;
+  flex: 1;
+  height: 8px;
+  border-radius: 999px;
+  background: #e7eaf0;
+  overflow: hidden;
+}
+
+.extraction-meter-fill {
+  height: 100%;
+  border-radius: inherit;
+}
+
+.extraction-meter-fill.low {
+  background: linear-gradient(90deg, #53c57a 0%, #8ddd8a 100%);
+}
+
+.extraction-meter-fill.medium {
+  background: linear-gradient(90deg, #e6b443 0%, #ffd36a 100%);
+}
+
+.extraction-meter-fill.high {
+  background: linear-gradient(90deg, #df6b6b 0%, #f08b8b 100%);
+}
+
 .trace-turn-head .turn-index {
   font-weight: 600;
   color: var(--text);
@@ -929,5 +1040,9 @@ body {
 
   .trace-footer {
     flex-wrap: wrap;
+  }
+
+  .extraction-grid {
+    grid-template-columns: 1fr;
   }
 }
