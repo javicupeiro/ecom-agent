@@ -55,6 +55,22 @@ class CompactionCfg(BaseModel):
     threshold: int = 20
     keep_recent: int = 6
 
+
+class VoiceCfg(BaseModel):
+    """Voice reply settings for text-to-speech output."""
+
+    model_id: str = "eleven_multilingual_v2"
+    audio_format: str = "mp3_44100_128"
+    spanish_voice_id: str = "MF3mGyEYCl7XYWbV9V6O"
+    english_voice_id: str = "EXAVITQu4vr4xnSDxMaL"
+    spanish_voice_label: str = "Mujer · Espanol"
+    english_voice_label: str = "Woman · US English"
+    stability: float = 0.35
+    similarity_boost: float = 0.75
+    style: float = 0.2
+    use_speaker_boost: bool = True
+    timeout_seconds: float = 30.0
+
 class Settings(BaseSettings):
     """Top-level application settings object."""
 
@@ -67,11 +83,14 @@ class Settings(BaseSettings):
 
     anthropic_api_key: str = ""  # from .env, never from config.toml
     openai_api_key: str = ""     # from .env
+    elevenlab_api_key: str = ""  # from .env
     llm: LlmCfg = LlmCfg()
     agent: AgentCfg = AgentCfg()
     db: DbCfg = DbCfg()
     rag: RagCfg = RagCfg()
     compaction: CompactionCfg = CompactionCfg()
+    voice: VoiceCfg = VoiceCfg()
+
     @classmethod
     def settings_customise_sources(
         cls,

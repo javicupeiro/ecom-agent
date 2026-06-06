@@ -21,6 +21,9 @@ const COPY = {
     emptyTitle: "Pega o escribe tu consulta",
     emptySub: "El agente responderá sobre productos SaborMix, recetas y soporte con trazas visibles para cada llamada al modelo y a las herramientas.",
     inputPlaceholder: "Escribe tu mensaje…",
+    responseModeLabel: "Formato de respuesta",
+    responseModeText: "Texto",
+    responseModeVoice: "Voz",
     hint: "Enter para enviar · Shift + Enter para salto de línea",
     send: "Enviar",
     traceTitle: "Actividad del agente",
@@ -70,6 +73,15 @@ const COPY = {
     contactError: (message) => `No se pudo contactar con el agente (${message}).`,
     inputPrefix: "input",
     languageChanged: "Idioma cambiado a Español. Se ha iniciado una conversación nueva.",
+    playVoice: "Reproducir audio",
+    stopVoice: "Detener audio",
+    rewindVoice: "Retroceder 10 segundos",
+    forwardVoice: "Avanzar 10 segundos",
+    seekVoice: "Mover reproduccion",
+    voiceMeta: "Respuesta de voz",
+    voiceFallback: "Audio no disponible. Se muestra la respuesta en texto.",
+    voiceLoading: "Cargando…",
+    voiceUnavailable: "Audio no disponible",
   },
   en: {
     documentTitle: "SaborMix · Agent Platform",
@@ -87,6 +99,9 @@ const COPY = {
     emptyTitle: "Paste or type your request",
     emptySub: "The agent will answer about SaborMix products, recipes, and support with visible traces for each model and tool call.",
     inputPlaceholder: "Type your message…",
+    responseModeLabel: "Reply format",
+    responseModeText: "Text",
+    responseModeVoice: "Voice",
     hint: "Enter to send · Shift + Enter for a new line",
     send: "Send",
     traceTitle: "Agent activity",
@@ -136,6 +151,15 @@ const COPY = {
     contactError: (message) => `Could not contact the agent (${message}).`,
     inputPrefix: "input",
     languageChanged: "Language changed to English. A new conversation has been started.",
+    playVoice: "Play audio",
+    stopVoice: "Stop audio",
+    rewindVoice: "Rewind 10 seconds",
+    forwardVoice: "Forward 10 seconds",
+    seekVoice: "Seek playback",
+    voiceMeta: "Voice reply",
+    voiceFallback: "Audio unavailable. Showing the text reply instead.",
+    voiceLoading: "Loading…",
+    voiceUnavailable: "Audio unavailable",
   },
 };
 
@@ -148,6 +172,9 @@ const el = {
   composer: document.getElementById("composer"),
   empty: document.getElementById("empty-state"),
   input: document.getElementById("input"),
+  replyMode: document.getElementById("reply-mode"),
+  replyModeLabel: document.getElementById("reply-mode-label"),
+  replyModeButtons: Array.from(document.querySelectorAll(".reply-mode-btn")),
   hint: document.querySelector(".hint"),
   sendLabel: document.querySelector(".btn-label"),
   send: document.getElementById("send"),
@@ -178,8 +205,15 @@ const el = {
 const state = {
   sessionId: newSessionId(),
   lang: "es",
+  responseMode: "text",
   turn: 0,
   totals: { calls: 0, inTokens: 0, outTokens: 0, tools: 0 },
+  activeAudio: null,
+  activeAudioButton: null,
+  activeAudioBubble: null,
+  activeAudioWave: null,
+  activeAudioSeek: null,
+  activeAudioTime: null,
 };
 
 function t() {
@@ -217,6 +251,13 @@ function prettyValue(value) {
 function nowTime() {
   const locale = state.lang === "en" ? "en-US" : "es-ES";
   return new Date().toLocaleTimeString(locale, { hour12: false });
+}
+
+function formatDuration(seconds) {
+  const safe = Number.isFinite(seconds) && seconds > 0 ? Math.floor(seconds) : 0;
+  const mins = Math.floor(safe / 60);
+  const secs = String(safe % 60).padStart(2, "0");
+  return `${mins}:${secs}`;
 }
 
 function scrollToEnd(container) {
@@ -423,10 +464,10 @@ function renderExtractionCard(extraction) {
   wrap.append(title, grid);
   return wrap;
 }
-function addBubble(role, text, { error = false } = {}) {
+function addBubble(role, text, { error = false, metaText = "" } = {}) {
   if (el.empty) el.empty.remove();
   const bubble = node("div", `bubble ${role}${error ? " error" : ""}`);
-  const meta = node("div", "bubble-meta", role === "user" ? t().userMeta : t().agentMeta);
+  const meta = node("div", "bubble-meta", metaText || (role === "user" ? t().userMeta : t().agentMeta));
   const body = node("div", `bubble-body${role === "agent" && !error ? " rich-text" : ""}`);
   if (role === "agent" && !error) {
     renderRichText(body, text);
@@ -436,6 +477,200 @@ function addBubble(role, text, { error = false } = {}) {
   bubble.append(meta, body);
   el.chat.appendChild(bubble);
   scrollToEnd(el.chat);
+  return bubble;
+}
+
+function playIcon() {
+  return `
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+      <path d="M8 6.5v11l9-5.5-9-5.5Z" />
+    </svg>
+  `;
+}
+
+function stopIcon() {
+  return `
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+      <rect x="7" y="7" width="10" height="10" rx="1.8" />
+    </svg>
+  `;
+}
+
+function setVoiceButtonState(button, isPlaying) {
+  button.innerHTML = isPlaying ? stopIcon() : playIcon();
+  button.setAttribute("aria-label", isPlaying ? t().stopVoice : t().playVoice);
+  button.title = isPlaying ? t().stopVoice : t().playVoice;
+}
+
+function stopActiveVoice() {
+  const audio = state.activeAudio;
+  if (!audio) return;
+  audio.pause();
+  audio.currentTime = 0;
+  if (state.activeAudioBubble) state.activeAudioBubble.classList.remove("playing");
+  if (state.activeAudioWave) state.activeAudioWave.style.setProperty("--progress", "0%");
+  if (state.activeAudioSeek) state.activeAudioSeek.value = "0";
+  if (state.activeAudioTime) {
+    const total = Number(state.activeAudioTime.dataset.duration || 0);
+    state.activeAudioTime.textContent = formatDuration(total);
+  }
+  if (state.activeAudioButton) setVoiceButtonState(state.activeAudioButton, false);
+  state.activeAudio = null;
+  state.activeAudioButton = null;
+  state.activeAudioBubble = null;
+  state.activeAudioWave = null;
+  state.activeAudioSeek = null;
+  state.activeAudioTime = null;
+}
+
+function clampTime(value, duration) {
+  if (!Number.isFinite(duration) || duration <= 0) return 0;
+  return Math.max(0, Math.min(duration, value));
+}
+
+function seekAudio(audio, nextTime) {
+  const duration = Number.isFinite(audio.duration) ? audio.duration : 0;
+  audio.currentTime = clampTime(nextTime, duration);
+}
+
+function addVoiceBubble(output) {
+  if (el.empty) el.empty.remove();
+
+  const bubble = node("div", "bubble agent voice");
+  const voiceLabel = output.voice_label || t().voiceMeta;
+  const meta = node("div", "bubble-meta", `${t().agentMeta} · ${voiceLabel}`);
+  const player = node("div", "voice-player");
+  const transport = node("div", "voice-transport");
+  const button = document.createElement("button");
+  button.className = "voice-play-btn";
+  button.type = "button";
+  setVoiceButtonState(button, false);
+
+  const rewind = document.createElement("button");
+  rewind.className = "voice-skip-btn";
+  rewind.type = "button";
+  rewind.textContent = "-10";
+  rewind.setAttribute("aria-label", t().rewindVoice);
+  rewind.title = t().rewindVoice;
+
+  const forward = document.createElement("button");
+  forward.className = "voice-skip-btn";
+  forward.type = "button";
+  forward.textContent = "+10";
+  forward.setAttribute("aria-label", t().forwardVoice);
+  forward.title = t().forwardVoice;
+
+  const wave = node("div", "voice-wave");
+  wave.style.setProperty("--progress", "0%");
+  const fill = node("div", "voice-wave-fill");
+  wave.appendChild(fill);
+  for (const h of [20, 34, 26, 42, 18, 30, 40, 24, 36, 22, 38, 26, 16, 31, 43, 28]) {
+    const bar = node("span", "voice-wave-bar");
+    bar.style.setProperty("--bar-h", `${h}%`);
+    wave.appendChild(bar);
+  }
+
+  const seek = document.createElement("input");
+  seek.className = "voice-seek";
+  seek.type = "range";
+  seek.min = "0";
+  seek.max = "1000";
+  seek.step = "1";
+  seek.value = "0";
+  seek.setAttribute("aria-label", t().seekVoice);
+
+  const time = node("div", "voice-time", t().voiceLoading);
+  time.dataset.duration = "0";
+  transport.append(rewind, button, forward);
+  player.append(transport, wave, seek, time);
+  bubble.append(meta, player);
+  el.chat.appendChild(bubble);
+  scrollToEnd(el.chat);
+
+  if (!output.audio_base64) {
+    time.textContent = t().voiceUnavailable;
+    button.disabled = true;
+    rewind.disabled = true;
+    forward.disabled = true;
+    seek.disabled = true;
+    return bubble;
+  }
+
+  const audio = new Audio(`data:${output.mime_type || "audio/mpeg"};base64,${output.audio_base64}`);
+  audio.preload = "metadata";
+
+  function syncFromPlayback() {
+    const duration = Number.isFinite(audio.duration) ? audio.duration : 0;
+    const current = audio.currentTime || 0;
+    const progress = duration > 0 ? Math.max(0, Math.min(100, (current / duration) * 100)) : 0;
+    wave.style.setProperty("--progress", `${progress}%`);
+    seek.value = String(duration > 0 ? Math.round((current / duration) * 1000) : 0);
+    time.dataset.duration = String(duration);
+    time.textContent = `${formatDuration(current)} / ${formatDuration(duration)}`;
+  }
+
+  audio.addEventListener("loadedmetadata", syncFromPlayback);
+  audio.addEventListener("timeupdate", syncFromPlayback);
+  audio.addEventListener("ended", stopActiveVoice);
+  audio.addEventListener("error", () => {
+    stopActiveVoice();
+    time.textContent = t().voiceUnavailable;
+    button.disabled = true;
+    rewind.disabled = true;
+    forward.disabled = true;
+    seek.disabled = true;
+  });
+
+  function seekFromRatio(ratio) {
+    const duration = Number.isFinite(audio.duration) ? audio.duration : 0;
+    if (duration <= 0) return;
+    seekAudio(audio, duration * ratio);
+    syncFromPlayback();
+  }
+
+  wave.addEventListener("click", (e) => {
+    const rect = wave.getBoundingClientRect();
+    if (!rect.width) return;
+    const ratio = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+    seekFromRatio(ratio);
+  });
+
+  seek.addEventListener("input", () => {
+    seekFromRatio(Number(seek.value) / 1000);
+  });
+
+  rewind.addEventListener("click", () => {
+    seekAudio(audio, (audio.currentTime || 0) - 10);
+    syncFromPlayback();
+  });
+
+  forward.addEventListener("click", () => {
+    seekAudio(audio, (audio.currentTime || 0) + 10);
+    syncFromPlayback();
+  });
+
+  button.addEventListener("click", async () => {
+    if (state.activeAudio === audio && !audio.paused) {
+      stopActiveVoice();
+      return;
+    }
+    stopActiveVoice();
+    try {
+      await audio.play();
+      bubble.classList.add("playing");
+      state.activeAudio = audio;
+      state.activeAudioButton = button;
+      state.activeAudioBubble = bubble;
+      state.activeAudioWave = wave;
+      state.activeAudioSeek = seek;
+      state.activeAudioTime = time;
+      setVoiceButtonState(button, true);
+      syncFromPlayback();
+    } catch {
+      time.textContent = t().voiceUnavailable;
+    }
+  });
+
   return bubble;
 }
 
@@ -611,13 +846,25 @@ async function sendMessage() {
     const res = await fetch(`${API}/chat`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ session_id: state.sessionId, message: text, lang: state.lang }),
+      body: JSON.stringify({
+        session_id: state.sessionId,
+        message: text,
+        lang: state.lang,
+        response_mode: state.responseMode,
+      }),
     });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json();
+    const output = data.output || { mode: "text", text: data.reply };
 
     typing.remove();
-    addBubble("agent", data.reply || t().noReply);
+    if (output.mode === "voice" && output.audio_base64) {
+      addVoiceBubble(output);
+    } else {
+      addBubble("agent", output.text || data.reply || t().noReply, {
+        metaText: output.voice_error ? `${t().agentMeta} · ${t().voiceFallback}` : "",
+      });
+    }
     renderTrace(text, data);
     setStatus(true);
   } catch (err) {
@@ -635,6 +882,7 @@ async function sendMessage() {
 // ───────── Reset / clear ─────────
 
 function resetConversation() {
+  stopActiveVoice();
   state.sessionId = newSessionId();
   state.turn = 0;
   state.totals = { calls: 0, inTokens: 0, outTokens: 0, tools: 0 };
@@ -656,6 +904,7 @@ function emptyState() {
 }
 
 function clearTraces() {
+  stopActiveVoice();
   el.trace.innerHTML = "";
   const wrap = node("div", "panel-empty");
   wrap.id = "trace-empty";
@@ -691,6 +940,14 @@ function applyLanguage(copyChanged = false) {
   el.reset.title = copy.resetTitle;
   el.reset.setAttribute("aria-label", copy.resetTitle);
   el.input.placeholder = copy.inputPlaceholder;
+  el.replyMode.setAttribute("aria-label", copy.responseModeLabel);
+  el.replyModeLabel.textContent = copy.responseModeLabel;
+  for (const button of el.replyModeButtons) {
+    button.textContent = button.dataset.mode === "voice" ? copy.responseModeVoice : copy.responseModeText;
+    const active = button.dataset.mode === state.responseMode;
+    button.classList.toggle("active", active);
+    button.setAttribute("aria-pressed", active ? "true" : "false");
+  }
   el.hint.textContent = copy.hint;
   el.sendLabel.textContent = copy.send;
   el.send.title = `${copy.send} (Enter)`;
@@ -738,6 +995,16 @@ function setLanguage(lang) {
   checkHealth();
 }
 
+function setResponseMode(mode) {
+  if (mode !== "text" && mode !== "voice") return;
+  state.responseMode = mode;
+  for (const button of el.replyModeButtons) {
+    const active = button.dataset.mode === mode;
+    button.classList.toggle("active", active);
+    button.setAttribute("aria-pressed", active ? "true" : "false");
+  }
+}
+
 // ───────── Input behavior ─────────
 
 function autoResize() {
@@ -756,11 +1023,18 @@ el.composer.addEventListener("submit", (e) => {
   e.preventDefault();
   sendMessage();
 });
-el.langTrigger.addEventListener("click", () => {
+el.langTrigger.addEventListener("click", (e) => {
+  e.stopPropagation();
   toggleLangMenu();
 });
+for (const button of el.replyModeButtons) {
+  button.addEventListener("click", () => {
+    setResponseMode(button.dataset.mode);
+  });
+}
 for (const option of el.langOptions) {
-  option.addEventListener("click", () => {
+  option.addEventListener("click", (e) => {
+    e.stopPropagation();
     setLanguage(option.dataset.lang);
   });
 }
@@ -773,5 +1047,6 @@ el.reset.addEventListener("click", resetConversation);
 el.traceClear.addEventListener("click", clearTraces);
 
 applyLanguage(false);
+setResponseMode(state.responseMode);
 checkHealth();
 el.input.focus();

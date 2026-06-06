@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Literal
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
@@ -16,6 +18,7 @@ from ecom_agent.rag.index import KnowledgeBase
 from ecom_agent.permissions import AllowList
 from ecom_agent.memory.store import JSONFileStore
 from ecom_agent.compaction.factory import build_compactor
+from ecom_agent.voice import ElevenLabsVoiceService, VoiceSynthesisError
 
 app = FastAPI(title="SaborMix Agent")
 app.add_middleware(
@@ -32,6 +35,7 @@ kb = KnowledgeBase(
 )
 store = JSONFileStore()
 compactor = build_compactor(settings, provider)
+voice_service = ElevenLabsVoiceService(provider, settings)
 
 _sessions: dict[str, Conversation] = {}
 
@@ -47,6 +51,7 @@ class ChatIn(BaseModel):
     session_id: str = "default"
     message: str
     lang: str | None = None
+    response_mode: Literal["text", "voice"] = "text"
 
 def _conversation(session_id: str, lang: str) -> Conversation:
     """Return the cached conversation for a session-language pair."""
@@ -68,8 +73,27 @@ def chat(body: ChatIn) -> dict:
 
     conv = _conversation(body.session_id, body.lang or settings.agent.default_language)
     result = conv.send(body.message)
+    output = {
+        "mode": "text",
+        "text": result.reply,
+    }
+    if body.response_mode == "voice":
+        try:
+            clip = voice_service.render(result.reply, lang=conv.lang)
+            output = {
+                "mode": "voice",
+                "text": result.reply,
+                "voice_script": clip.script,
+                "audio_base64": clip.audio_base64,
+                "mime_type": clip.mime_type,
+                "voice_id": clip.voice_id,
+                "voice_label": clip.voice_label,
+            }
+        except VoiceSynthesisError as exc:
+            output["voice_error"] = str(exc)
     return {
         "reply": result.reply,
+        "output": output,
         "model": result.trace.calls[-1]["model"] if result.trace.calls else "",
         "trace": {
             "provider_calls": result.trace.provider_calls,

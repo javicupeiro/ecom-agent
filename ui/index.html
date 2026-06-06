@@ -104,6 +104,31 @@
         </div>
 
         <form class="composer" id="composer">
+          <div class="composer-toolbar">
+            <div class="reply-mode" id="reply-mode" role="group" aria-label="Formato de respuesta">
+              <div class="reply-mode-label" id="reply-mode-label">Formato de respuesta</div>
+              <div class="reply-mode-switch">
+                <button
+                  class="reply-mode-btn active"
+                  id="reply-mode-text"
+                  type="button"
+                  data-mode="text"
+                  aria-pressed="true"
+                >
+                  Texto
+                </button>
+                <button
+                  class="reply-mode-btn"
+                  id="reply-mode-voice"
+                  type="button"
+                  data-mode="voice"
+                  aria-pressed="false"
+                >
+                  Voz
+                </button>
+              </div>
+            </div>
+          </div>
           <textarea
             id="input"
             rows="5"
