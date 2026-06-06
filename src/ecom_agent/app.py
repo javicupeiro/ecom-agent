@@ -12,6 +12,7 @@ from ecom_agent.providers.factory import build_provider
 from ecom_agent.orchestrator import Conversation
 from ecom_agent.rag.index import KnowledgeBase
 from ecom_agent.permissions import AllowList
+from ecom_agent.memory.store import JSONFileStore
 
 app = FastAPI(title="SaborMix Agent")
 app.add_middleware(
@@ -26,6 +27,7 @@ kb = KnowledgeBase(
     settings.rag.persist_dir, settings.rag.collection, settings.openai_api_key,
     settings.rag.embedding_model, settings.rag.top_k,
 )
+store = JSONFileStore()
 
 SYSTEM_PROMPT = (
     "You are a helpful assistant for SaborMix, a kitchen robot brand. "
@@ -48,7 +50,7 @@ def _conversation(session_id: str, lang: str) -> Conversation:
     conv = _sessions.get(session_id)
     if conv is None or conv.lang != lang:
         conv = Conversation(
-            provider, db=db, kb=kb, lang=lang, session_id=session_id,
+            provider, db=db, kb=kb, lang=lang, store=store, session_id=session_id,
             policy=AllowList(["query_orders", "search_knowledge_base"]),
             max_steps=settings.agent.max_steps,
         )
@@ -68,3 +70,11 @@ def chat(body: ChatIn) -> dict:
             "steps": result.trace.steps,
         },
     }
+
+@app.post("/summary")
+def summary(session_id: str = "default") -> dict:
+    conv = _sessions.get(session_id)
+    if conv is None:
+        return {"summary": "", "session_id": session_id}
+    return conv.summarize()
+

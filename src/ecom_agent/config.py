@@ -38,7 +38,7 @@ class RagCfg(BaseModel):
     collection: str = "sabormix"
     persist_dir: str = "./.data/chroma"
     embedding_model: str = "text-embedding-3-small"
-    top_k: int = 3
+    top_k: int = 6
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(

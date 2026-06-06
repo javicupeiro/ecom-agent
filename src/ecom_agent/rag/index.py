@@ -75,9 +75,14 @@ class KnowledgeBase:
             self._collection.upsert(ids=ids, documents=docs, metadatas=metas)
         return len(ids)
 
-    def search(self, query: str, lang: str = "es", k: int | None = None) -> list[Hit]:
+    def search(
+        self, query: str, lang: str = "es", k: int | None = None, area: str | None = None
+    ) -> list[Hit]:
+        where: dict = {"lang": lang}
+        if area:
+            where = {"$and": [{"lang": lang}, {"area": area}]}
         res = self._collection.query(
-            query_texts=[query], n_results=k or self.top_k, where={"lang": lang}
+            query_texts=[query], n_results=k or self.top_k, where=where
         )
         hits: list[Hit] = []
         for doc, meta in zip(res["documents"][0], res["metadatas"][0]):

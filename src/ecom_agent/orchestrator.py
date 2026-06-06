@@ -37,7 +37,8 @@ class TurnResult:
 class Ctx:
     lang: str = "es"  
     db: object | None = None      # OrdersDB
-    kb: object | None = None        # KnowledgeBase
+    kb: object | None = None      # KnowledgeBase
+    store: object | None = None   # Store for recall/remember
     session_id: str = "default"
 
 
@@ -51,6 +52,7 @@ class Conversation:
         lang: str = "es",
         db=None,
         kb=None,
+        store=None,
         session_id: str = "default",
         system_prompt: str = SYSTEM_PROMPT,
         max_steps: int = 6,
@@ -61,6 +63,7 @@ class Conversation:
         self.lang = lang
         self.db = db
         self.kb = kb
+        self.store = store
         self.session_id = session_id
         self.max_steps = max_steps
         self.messages: list[Message] = [Message.system(system_prompt)]
@@ -71,12 +74,15 @@ class Conversation:
             lang=self.lang,
             db=self.db,
             kb=self.kb,
+            store=self.store,
             session_id=self.session_id,
         )
     
     def send(self, user_text: str) -> TurnResult:
         """One outer-loop eval: feed user input, run inner agent loop until the model stops."""
         self.messages.append(Message.user(user_text))
+        if self.store:
+            self.store.save(self.session_id, {"role": "user", "text": user_text})
         trace = DebugTrace()
         for _ in range(self.max_steps):
             resp = self.provider.send(self.messages, self.registry.definitions())
@@ -86,6 +92,8 @@ class Conversation:
 
             uses = resp.tool_uses()
             if resp.stop_reason != "tool_use" or not uses:
+                if self.store:
+                    self.store.save(self.session_id, {"role": "assistant", "text": resp.text()})
                 return TurnResult(reply=resp.text(), trace=trace)
 
             result_blocks = []
@@ -101,3 +109,12 @@ class Conversation:
             self.messages.append(Message(role="user", content=result_blocks))
 
         return TurnResult(reply="(step limit reached)", trace=trace)
+    
+    def summarize(self) -> dict:
+        body = [m for m in self.messages if m.role != "system"]
+        prompt = [
+            Message.system("Summarize this conversation in 3-4 sentences and list key points."),
+            *body,
+            Message.user("Please summarize the conversation above."),
+        ]
+        return {"summary": self.provider.send(prompt, []).text(), "session_id": self.session_id}
