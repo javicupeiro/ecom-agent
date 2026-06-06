@@ -35,7 +35,9 @@ class TurnResult:
 
 @dataclass
 class Ctx:
-    lang: str = "es"  # grows in later phases (store, draft, kb, session_id)
+    lang: str = "es"  
+    db: object | None = None      # OrdersDB
+    session_id: str = "default"
 
 
 class Conversation:
@@ -46,6 +48,8 @@ class Conversation:
         registry: ToolRegistry | None = None,
         policy: PermissionPolicy | None = None,
         lang: str = "es",
+        db=None,
+        session_id: str = "default",
         system_prompt: str = SYSTEM_PROMPT,
         max_steps: int = 6,
     ) -> None:
@@ -53,10 +57,21 @@ class Conversation:
         self.registry = registry or default_registry
         self.policy = policy or AlwaysAllow()
         self.lang = lang
+        self.db = db
+        self.session_id = session_id
         self.max_steps = max_steps
         self.messages: list[Message] = [Message.system(system_prompt)]
+        self.total_usage = Usage()
 
+    def _ctx(self) -> Ctx:
+        return Ctx(
+            lang=self.lang,
+            db=self.db,
+            session_id=self.session_id,
+        )
+    
     def send(self, user_text: str) -> TurnResult:
+        """One outer-loop eval: feed user input, run inner agent loop until the model stops."""
         self.messages.append(Message.user(user_text))
         trace = DebugTrace()
         for _ in range(self.max_steps):
@@ -71,7 +86,7 @@ class Conversation:
 
             result_blocks = []
             for u in uses:
-                tr = self.registry.dispatch(u.name, u.input, Ctx(lang=self.lang), self.policy)
+                tr = self.registry.dispatch(u.name, u.input, self._ctx(), self.policy)
                 trace.tools_used.append(u.name)
                 trace.steps.append(
                     {"tool": u.name, "input": u.input, "result": tr.content, "error": tr.is_error}

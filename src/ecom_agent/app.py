@@ -7,7 +7,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from ecom_agent.config import get_settings
-from ecom_agent.domain.types import Message
+from ecom_agent.db.orders import OrdersDB
 from ecom_agent.providers.factory import build_provider
 from ecom_agent.orchestrator import Conversation
 
@@ -17,13 +17,9 @@ app.add_middleware(
 )
 app.mount("/static", StaticFiles(directory="ui"), name="static")
 
-
-@app.get("/")
-def index() -> FileResponse:
-    return FileResponse("ui/index.html")
-
 settings = get_settings()
 provider = build_provider(settings)
+db = OrdersDB(settings.db.path)
 
 SYSTEM_PROMPT = (
     "You are a helpful assistant for SaborMix, a kitchen robot brand. "
@@ -32,21 +28,30 @@ SYSTEM_PROMPT = (
 
 _sessions: dict[str, Conversation] = {}
 
+
+@app.get("/")
+def index() -> FileResponse:
+    return FileResponse("ui/index.html")
+
 class ChatIn(BaseModel):
     session_id: str = "default"
     message: str
     lang: str | None = None
 
-@app.post("/chat")
-def chat(body: ChatIn) -> dict:
-    requested_lang = body.lang or settings.agent.default_language
-    if body.session_id not in _sessions or _sessions[body.session_id].lang != requested_lang:
-        _sessions[body.session_id] = Conversation(
-            provider,
-            lang=requested_lang,
+def _conversation(session_id: str, lang: str) -> Conversation:
+    conv = _sessions.get(session_id)
+    if conv is None or conv.lang != lang:
+        conv = Conversation(
+            provider, db=db, lang=lang, session_id=session_id,
             max_steps=settings.agent.max_steps,
         )
-    result = _sessions[body.session_id].send(body.message)
+        _sessions[session_id] = conv
+    return conv
+
+@app.post("/chat")
+def chat(body: ChatIn) -> dict:
+    conv = _conversation(body.session_id, body.lang or settings.agent.default_language)
+    result = conv.send(body.message)
     return {
         "reply": result.reply,
         "trace": {

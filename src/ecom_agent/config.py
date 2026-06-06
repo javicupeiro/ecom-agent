@@ -30,6 +30,8 @@ class AgentCfg(BaseModel):
     max_steps: int = 6
     default_language: str = "es"
 
+class DbCfg(BaseModel):
+    path: str = "./.data/orders.db"
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
@@ -43,6 +45,7 @@ class Settings(BaseSettings):
     openai_api_key: str = ""     # from .env
     llm: LlmCfg = LlmCfg()
     agent: AgentCfg = AgentCfg()
+    db: DbCfg = DbCfg()
 
     @classmethod
     def settings_customise_sources(

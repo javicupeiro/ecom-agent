@@ -7,3 +7,9 @@ max_tokens = 1024
 temperature = 0.1
 # top_p = 0.95
 
+[agent]
+max_steps = 6
+default_language = "es"       # the UI toggle overrides this per request
+
+[db]
+path = "./.data/orders.db"
