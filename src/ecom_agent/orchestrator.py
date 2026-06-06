@@ -16,7 +16,14 @@ from ecom_agent.compaction.strategy import NoCompaction
 SYSTEM_PROMPT = (
     "You are the SaborMix customer agent. You help with sales, recipes and "
     "technical support. Use the available tools to ground your answers in the "
-    "knowledge base. Always reply in the customer's language."
+    "knowledge base. Always reply in the customer's language. Keep a "
+    "professional, warm and concise tone. Do not use emojis unless the user "
+    "explicitly asks for them. Do not write raw Markdown syntax or decorative "
+    "headings unless it clearly improves readability. Prefer clean chat-style "
+    "paragraphs and short lists. When relevant, recommend the most suitable "
+    "SaborMix product or accessory naturally. End each answer with one short, "
+    "helpful follow-up suggestion or question that moves the conversation "
+    "forward."
 )
 
 
@@ -26,6 +33,7 @@ class DebugTrace:
     tools_used: list[str] = field(default_factory=list)
     usage: Usage = field(default_factory=Usage)
     steps: list[dict] = field(default_factory=list)
+    calls: list[dict] = field(default_factory=list)
 
 
 @dataclass
@@ -93,6 +101,17 @@ class Conversation:
             trace.provider_calls += 1
             trace.usage = trace.usage + resp.usage
             self.messages.append(Message(role="assistant", content=resp.blocks))
+            visible_text = resp.text().strip()
+            tool_names = [u.name for u in resp.tool_uses()]
+            trace.calls.append(
+                {
+                    "index": trace.provider_calls,
+                    "model": resp.model,
+                    "stop_reason": resp.stop_reason,
+                    "visible_text": visible_text,
+                    "tool_names": tool_names,
+                }
+            )
 
             uses = resp.tool_uses()
             if resp.stop_reason != "tool_use" or not uses:
@@ -105,7 +124,13 @@ class Conversation:
                 tr = self.registry.dispatch(u.name, u.input, self._ctx(), self.policy)
                 trace.tools_used.append(u.name)
                 trace.steps.append(
-                    {"tool": u.name, "input": u.input, "result": tr.content, "error": tr.is_error}
+                    {
+                        "call_index": trace.provider_calls,
+                        "tool": u.name,
+                        "input": u.input,
+                        "result": tr.content,
+                        "error": tr.is_error,
+                    }
                 )
                 result_blocks.append(
                     ToolResultBlock(tool_use_id=u.id, content=tr.content, is_error=tr.is_error)

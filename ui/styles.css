@@ -51,6 +51,9 @@ body {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  display: flex;
+  flex-direction: column;
+  max-height: 460px;
   padding: 0 24px;
   flex-shrink: 0;
 }
@@ -88,10 +91,13 @@ body {
 }
 
 .lang-menu {
-  position: relative;
 }
 
 .lang-trigger {
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable both-edges;
   display: inline-flex;
   align-items: center;
   gap: 8px;
@@ -114,8 +120,8 @@ body {
   border-color: var(--border-strong);
 }
 
-.lang-trigger:focus-visible {
-  outline: none;
+  max-height: none;
+  overflow: visible;
   border-color: var(--accent);
   box-shadow: 0 0 0 3px rgba(42, 76, 255, 0.12);
 }
@@ -378,6 +384,50 @@ body {
   animation: rise 0.18s ease;
 }
 
+.bubble-body {
+  min-width: 0;
+}
+
+.bubble-body.rich-text {
+  white-space: normal;
+}
+
+.msg-heading {
+  font-weight: 600;
+  color: var(--text);
+  margin-bottom: 8px;
+}
+
+.msg-paragraph {
+  margin: 0;
+}
+
+.msg-paragraph + .msg-paragraph,
+.msg-heading + .msg-paragraph,
+.msg-list + .msg-paragraph,
+.msg-paragraph + .msg-list,
+.msg-heading + .msg-list {
+  margin-top: 10px;
+}
+
+.msg-list {
+  margin: 0;
+  padding-left: 18px;
+}
+
+.msg-list li + li {
+  margin-top: 6px;
+}
+
+.rich-text code {
+  display: inline-block;
+  font-family: var(--mono);
+  font-size: 12px;
+  padding: 1px 6px;
+  border-radius: 6px;
+  background: rgba(17, 20, 26, 0.06);
+}
+
 @keyframes rise {
   from {
     opacity: 0;
@@ -538,6 +588,8 @@ body {
   flex-direction: column;
   background: var(--bg);
   min-height: 0;
+  min-width: 0;
+  overflow: hidden;
 }
 
 .trace-header {
@@ -569,6 +621,8 @@ body {
   display: flex;
   flex-direction: column;
   gap: 12px;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
 }
 
 .panel-empty {
@@ -601,18 +655,50 @@ body {
   box-shadow: var(--shadow);
   overflow: hidden;
   animation: rise 0.18s ease;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  flex: 0 0 auto;
+  max-height: 460px;
 }
 
 .trace-turn-head {
+  background: var(--panel-2);
+  font-size: 11.5px;
+  color: var(--text-muted);
+  border-bottom: 1px solid var(--border);
+  padding: 10px 14px;
+}
+
+.trace-turn-main {
+  min-width: 0;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 8px;
-  padding: 8px 14px;
-  background: var(--panel-2);
-  border-bottom: 1px solid var(--border);
-  font-size: 11.5px;
-  color: var(--text-muted);
+  gap: 10px;
+}
+
+.trace-turn-content {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.trace-turn-summary {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text-dim);
+  white-space: normal;
+  line-height: 1.45;
+}
+
+.trace-turn-body {
+  display: block;
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable both-edges;
 }
 
 .trace-turn-head .turn-index {
@@ -633,11 +719,15 @@ body {
 
 .evt {
   display: grid;
-  grid-template-columns: 16px 1fr;
+  grid-template-columns: 16px minmax(0, 1fr);
   gap: 9px;
   padding: 9px 14px;
   border-top: 1px solid var(--border);
   font-size: 12.5px;
+}
+
+.evt-main {
+  min-width: 0;
 }
 
 .evt:first-child {
@@ -654,6 +744,10 @@ body {
 
 .evt.llm .evt-dot {
   background: var(--accent);
+}
+
+.evt.step {
+  background: rgba(42, 76, 255, 0.02);
 }
 
 .evt.tool .evt-dot {
@@ -701,8 +795,8 @@ body {
   padding: 7px 9px;
   white-space: pre-wrap;
   word-break: break-word;
-  max-height: 150px;
-  overflow: auto;
+  max-height: none;
+  overflow: visible;
 }
 
 .evt.error .evt-detail {
@@ -770,6 +864,10 @@ body {
     grid-template-rows: minmax(0, 1.3fr) minmax(0, 1fr);
   }
 
+  .trace-turn-toggle {
+    align-items: start;
+  }
+
   .tabbar {
     padding: 0 16px;
   }
@@ -798,6 +896,16 @@ body {
     padding-bottom: 10px;
     gap: 12px;
     align-items: flex-start;
+  }
+
+  .trace-turn-main {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .trace-turn-head .turn-time,
+  .trace-turn-summary {
+    white-space: normal;
   }
 
   .brand-sub {

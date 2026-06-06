@@ -66,10 +66,12 @@ def chat(body: ChatIn) -> dict:
     result = conv.send(body.message)
     return {
         "reply": result.reply,
+        "model": result.trace.calls[-1]["model"] if result.trace.calls else "",
         "trace": {
             "provider_calls": result.trace.provider_calls,
             "tools_used": result.trace.tools_used,
             "usage": result.trace.usage.model_dump(),
+            "calls": result.trace.calls,
             "steps": result.trace.steps,
         },
     }

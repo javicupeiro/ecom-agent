@@ -26,6 +26,8 @@ const COPY = {
     traceTitle: "Actividad del agente",
     traceSub: "Cada turno muestra modelo, herramientas y respuesta",
     clearTraceTitle: "Limpiar trazas",
+    expandTurn: "Desplegar turno",
+    collapseTurn: "Compactar turno",
     panelEmptyTitle: "Sin actividad aún",
     panelEmptySub: "El resumen estructurado del turno aparecerá aquí cuando envíes el primer mensaje.",
     statCalls: "Llamadas",
@@ -41,10 +43,20 @@ const COPY = {
     eventUserLabel: "Mensaje recibido",
     eventModelLabel: "El modelo razona y decide",
     eventModelMeta: (calls) => `${calls} llamada(s) al proveedor`,
+    eventModelSummary: (calls, tools) => `${calls} llamada(s) al modelo · ${tools} herramienta(s) ejecutada(s)`,
+    eventModelStepLabel: (index) => `Paso del modelo ${index}`,
+    eventModelStepMeta: (model, stopReason) => `${model || "modelo desconocido"} · ${stopReason}`,
     eventReplyLabel: "Respuesta enviada",
     eventErrorLabel: "Fallo en el turno",
     toolError: "error",
     toolOk: "ok",
+    toolInputLabel: "Entrada",
+    toolOutputLabel: "Resultado",
+    toolStepLabel: (index) => `Ejecución ligada al paso ${index}`,
+    stopReasonToolUse: "solicita herramientas",
+    stopReasonEndTurn: "emite respuesta final",
+    stopReasonMaxTokens: "alcanza el límite de tokens",
+    noVisibleModelText: "Sin texto visible del modelo en este paso.",
     noReply: "(sin respuesta)",
     contactError: (message) => `No se pudo contactar con el agente (${message}).`,
     inputPrefix: "input",
@@ -71,6 +83,8 @@ const COPY = {
     traceTitle: "Agent activity",
     traceSub: "Each turn shows model, tools, and response",
     clearTraceTitle: "Clear traces",
+    expandTurn: "Expand turn",
+    collapseTurn: "Collapse turn",
     panelEmptyTitle: "No activity yet",
     panelEmptySub: "The structured turn summary will appear here when you send the first message.",
     statCalls: "Calls",
@@ -86,10 +100,20 @@ const COPY = {
     eventUserLabel: "Message received",
     eventModelLabel: "The model reasons and decides",
     eventModelMeta: (calls) => `${calls} provider call(s)`,
+    eventModelSummary: (calls, tools) => `${calls} model call(s) · ${tools} tool run(s)`,
+    eventModelStepLabel: (index) => `Model step ${index}`,
+    eventModelStepMeta: (model, stopReason) => `${model || "unknown model"} · ${stopReason}`,
     eventReplyLabel: "Reply sent",
     eventErrorLabel: "Turn failed",
     toolError: "error",
     toolOk: "ok",
+    toolInputLabel: "Input",
+    toolOutputLabel: "Result",
+    toolStepLabel: (index) => `Execution linked to step ${index}`,
+    stopReasonToolUse: "requests tools",
+    stopReasonEndTurn: "returns final answer",
+    stopReasonMaxTokens: "hits token limit",
+    noVisibleModelText: "No visible model text for this step.",
     noReply: "(no response)",
     contactError: (message) => `Could not contact the agent (${message}).`,
     inputPrefix: "input",
@@ -160,6 +184,16 @@ function truncate(value, max = 800) {
   return s.length > max ? s.slice(0, max) + " …" : s;
 }
 
+function prettyValue(value) {
+  if (value == null) return "";
+  if (typeof value === "string") return value;
+  try {
+    return JSON.stringify(value, null, 2);
+  } catch {
+    return String(value);
+  }
+}
+
 function nowTime() {
   const locale = state.lang === "en" ? "en-US" : "es-ES";
   return new Date().toLocaleTimeString(locale, { hour12: false });
@@ -169,13 +203,154 @@ function scrollToEnd(container) {
   container.scrollTop = container.scrollHeight;
 }
 
+function escapeHtml(text) {
+  return String(text)
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;");
+}
+
+function formatInline(text) {
+  let html = escapeHtml(text);
+  html = html.replace(/`([^`]+)`/g, "<code>$1</code>");
+  html = html.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
+  html = html.replace(/__([^_]+)__/g, "<strong>$1</strong>");
+  html = html.replace(/(^|[^*])\*([^*]+)\*(?!\*)/g, "$1<em>$2</em>");
+  html = html.replace(/(^|[^_])_([^_]+)_(?!_)/g, "$1<em>$2</em>");
+  return html;
+}
+
+function tokenizeBlocks(text) {
+  const normalized = String(text || "").replace(/\r\n/g, "\n").trim();
+  if (!normalized) return [];
+
+  const lines = normalized.split("\n");
+  const blocks = [];
+  let paragraph = [];
+  let list = [];
+
+  function flushParagraph() {
+    if (!paragraph.length) return;
+    blocks.push({ type: "paragraph", lines: paragraph });
+    paragraph = [];
+  }
+
+  function flushList() {
+    if (!list.length) return;
+    blocks.push({ type: "list", items: list });
+    list = [];
+  }
+
+  for (const rawLine of lines) {
+    const line = rawLine.trim();
+    if (!line) {
+      flushParagraph();
+      flushList();
+      continue;
+    }
+
+    if (/^---+$/.test(line)) {
+      flushParagraph();
+      flushList();
+      continue;
+    }
+
+    const headingMatch = line.match(/^#{1,6}\s+(.+)$/);
+    if (headingMatch) {
+      flushParagraph();
+      flushList();
+      blocks.push({ type: "heading", text: headingMatch[1].trim() });
+      continue;
+    }
+
+    const listMatch = line.match(/^[-*•]\s+(.+)$/);
+    if (listMatch) {
+      flushParagraph();
+      list.push(listMatch[1].trim());
+      continue;
+    }
+
+    flushList();
+    paragraph.push(line);
+  }
+
+  flushParagraph();
+  flushList();
+  return blocks;
+}
+
+function renderRichText(container, text) {
+  const blocks = tokenizeBlocks(text);
+  if (!blocks.length) {
+    container.textContent = text || "";
+    return;
+  }
+
+  for (const block of blocks) {
+    if (block.type === "heading") {
+      const heading = node("div", "msg-heading");
+      heading.innerHTML = formatInline(block.text);
+      container.appendChild(heading);
+      continue;
+    }
+
+    if (block.type === "list") {
+      const list = node("ul", "msg-list");
+      for (const itemText of block.items) {
+        const item = node("li");
+        item.innerHTML = formatInline(itemText);
+        list.appendChild(item);
+      }
+      container.appendChild(list);
+      continue;
+    }
+
+    const paragraph = node("p", "msg-paragraph");
+    paragraph.innerHTML = block.lines.map(formatInline).join("<br>");
+    container.appendChild(paragraph);
+  }
+}
+
+function localizeStopReason(reason) {
+  if (reason === "tool_use") return t().stopReasonToolUse;
+  if (reason === "max_tokens") return t().stopReasonMaxTokens;
+  return t().stopReasonEndTurn;
+}
+
+function stepDetail(step) {
+  return [
+    `${t().toolInputLabel}:`,
+    truncate(prettyValue(step.input), 1000),
+    "",
+    `${t().toolOutputLabel}:`,
+    truncate(prettyValue(step.result), 1600),
+  ].join("\n");
+}
+
+function modelCallDetail(call) {
+  const parts = [];
+  if (call.visible_text) parts.push(call.visible_text);
+  if (call.tool_names && call.tool_names.length) {
+    parts.push(`tools: ${call.tool_names.join(", ")}`);
+  }
+  if (!parts.length) parts.push(t().noVisibleModelText);
+  return parts.join("\n\n");
+}
+
 // ───────── Chat rendering ─────────
 
 function addBubble(role, text, { error = false } = {}) {
   if (el.empty) el.empty.remove();
   const bubble = node("div", `bubble ${role}${error ? " error" : ""}`);
   const meta = node("div", "bubble-meta", role === "user" ? t().userMeta : t().agentMeta);
-  const body = node("div", "bubble-body", text);
+  const body = node("div", `bubble-body${role === "agent" && !error ? " rich-text" : ""}`);
+  if (role === "agent" && !error) {
+    renderRichText(body, text);
+  } else {
+    body.textContent = text;
+  }
   bubble.append(meta, body);
   el.chat.appendChild(bubble);
   scrollToEnd(el.chat);
@@ -198,7 +373,7 @@ function addTyping() {
 function evt(kind, cls, label, { detail, tag, meta } = {}) {
   const row = node("div", `evt ${cls}`);
   row.appendChild(node("span", "evt-dot"));
-  const main = node("div");
+  const main = node("div", "evt-main");
   const labelEl = node("div", "evt-label");
   labelEl.appendChild(node("span", "evt-kind", kind));
   labelEl.appendChild(document.createTextNode(label));
@@ -220,35 +395,64 @@ function renderTrace(userText, data) {
   const trace = data.trace || {};
   const usage = trace.usage || { input_tokens: 0, output_tokens: 0 };
   const steps = trace.steps || [];
+  const traceCalls = trace.calls || [];
   const calls = trace.provider_calls || 0;
 
   const turn = node("div", "trace-turn");
 
   const head = node("div", "trace-turn-head");
-  head.appendChild(node("span", "turn-index", `${t().turn} ${state.turn}`));
-  const headRight = node("span", "turn-time",
-    `↑${usage.input_tokens} ↓${usage.output_tokens} · ${nowTime()}`);
-  head.appendChild(headRight);
+  const headContent = node("div", "trace-turn-content");
+  const headMain = node("div", "trace-turn-main");
+  headMain.appendChild(node("span", "turn-index", `${t().turn} ${state.turn}`));
+  headMain.appendChild(node("span", "turn-time",
+    `↑${usage.input_tokens} ↓${usage.output_tokens} · ${nowTime()}`));
+
+  const headMeta = node("div", "trace-turn-summary");
+  headMeta.textContent = t().eventModelSummary(calls, steps.length);
+  headContent.append(headMain, headMeta);
+
+  head.appendChild(headContent);
   turn.appendChild(head);
 
+  const body = node("div", "trace-turn-body");
   const events = node("div", "trace-events");
 
   events.appendChild(evt(t().eventUser, "request", t().eventUserLabel, { detail: userText }));
 
   events.appendChild(
     evt(t().eventModel, "llm", t().eventModelLabel, {
-      meta: t().eventModelMeta(calls),
+      meta: t().eventModelSummary(calls, steps.length),
     }),
   );
 
-  for (const step of steps) {
-    const detail = `${t().inputPrefix}: ${truncate(step.input)}\n→ ${truncate(step.result)}`;
-    events.appendChild(
-      evt("tool", `tool${step.error ? " error" : ""}`, step.tool, {
-        detail,
-        tag: step.error ? { ok: false, text: t().toolError } : { ok: true, text: t().toolOk },
-      }),
-    );
+  if (traceCalls.length) {
+    for (const call of traceCalls) {
+      events.appendChild(
+        evt(t().eventModel, "llm step", t().eventModelStepLabel(call.index), {
+          meta: t().eventModelStepMeta(call.model || data.model, localizeStopReason(call.stop_reason)),
+          detail: modelCallDetail(call),
+        }),
+      );
+
+      for (const step of steps.filter((item) => item.call_index === call.index)) {
+        events.appendChild(
+          evt("tool", `tool${step.error ? " error" : ""}`, step.tool, {
+            meta: t().toolStepLabel(step.call_index),
+            detail: stepDetail(step),
+            tag: step.error ? { ok: false, text: t().toolError } : { ok: true, text: t().toolOk },
+          }),
+        );
+      }
+    }
+  } else {
+    for (const step of steps) {
+      events.appendChild(
+        evt("tool", `tool${step.error ? " error" : ""}`, step.tool, {
+          detail: stepDetail(step),
+          tag: step.error ? { ok: false, text: t().toolError } : { ok: true, text: t().toolOk },
+        }),
+      );
+    }
   }
 
   if (data.error) {
@@ -257,9 +461,10 @@ function renderTrace(userText, data) {
     events.appendChild(evt(t().eventReply, "reply", t().eventReplyLabel, { detail: truncate(data.reply) }));
   }
 
-  turn.appendChild(events);
-  el.trace.appendChild(turn);
-  scrollToEnd(el.trace);
+  body.appendChild(events);
+  turn.appendChild(body);
+  el.trace.prepend(turn);
+  el.trace.scrollTop = 0;
 
   // Running totals in the footer.
   state.totals.calls += calls;
