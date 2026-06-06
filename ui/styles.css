@@ -643,6 +643,150 @@ body {
   gap: 12px;
 }
 
+.toolbar-recorder {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.toolbar-recorder-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 56px;
+}
+
+.recorder {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 16px;
+  padding: 0;
+  border: none;
+  background: transparent;
+}
+
+.recorder-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.recorder-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #c7ced9;
+}
+
+.recorder-dot.recording {
+  background: #ef4444;
+  box-shadow: 0 0 0 6px rgba(239, 68, 68, 0.12);
+  animation: recorderPulse 1.4s infinite ease-in-out;
+}
+
+.recorder-dot.paused {
+  background: #ef4444;
+  box-shadow: 0 0 0 4px rgba(239, 68, 68, 0.08);
+}
+
+.recorder-dot.sending {
+  background: var(--accent);
+  box-shadow: 0 0 0 4px rgba(42, 76, 255, 0.12);
+}
+
+.recorder-text {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.recorder-time {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+.recorder-actions,
+.composer-cta {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.recorder-btn,
+.mic-btn {
+  height: 38px;
+  padding: 0 14px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--panel);
+  color: var(--text-muted);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: border-color 0.15s ease, color 0.15s ease, background 0.15s ease, transform 0.12s ease;
+}
+
+.mic-btn {
+  width: 42px;
+  padding: 0;
+  justify-content: center;
+  display: inline-flex;
+  align-items: center;
+  color: var(--accent);
+}
+
+.mic-btn svg {
+  transition: transform 0.12s ease;
+}
+
+.mic-btn:hover:not(:disabled) svg {
+  transform: scale(1.05);
+}
+
+.recorder-btn.primary {
+  background: var(--text);
+  border-color: var(--text);
+  color: white;
+}
+
+.recorder-btn.danger {
+  color: var(--danger);
+}
+
+.recorder-btn:hover:not(:disabled),
+.mic-btn:hover:not(:disabled) {
+  border-color: var(--border-strong);
+  color: var(--text);
+  background: var(--panel-2);
+}
+
+.recorder-btn.primary:hover:not(:disabled) {
+  background: #1c2129;
+  border-color: #1c2129;
+  color: white;
+}
+
+.recorder-btn:disabled,
+.mic-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+@keyframes recorderPulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+
+  50% {
+    opacity: 0.35;
+  }
+}
+
 .reply-mode {
   display: inline-flex;
   align-items: center;
@@ -757,6 +901,49 @@ body {
 .send-btn:disabled {
   opacity: 0.45;
   cursor: not-allowed;
+}
+
+.bubble.user.voice {
+  align-self: flex-end;
+  background: var(--accent);
+  color: white;
+  border: none;
+  border-bottom-right-radius: 4px;
+}
+
+.bubble.user.voice .bubble-meta {
+  color: rgba(255, 255, 255, 0.72);
+}
+
+.bubble.user.voice .voice-play-btn {
+  background: rgba(255, 255, 255, 0.18);
+  box-shadow: none;
+}
+
+.bubble.user.voice .voice-skip-btn {
+  border-color: rgba(255, 255, 255, 0.18);
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.85);
+}
+
+.bubble.user.voice .voice-wave-fill {
+  background: linear-gradient(90deg, rgba(255, 255, 255, 0.12) 0%, rgba(255, 255, 255, 0.24) 100%);
+}
+
+.bubble.user.voice .voice-wave-bar {
+  background: rgba(255, 255, 255, 0.36);
+}
+
+.bubble.user.voice.playing .voice-wave-bar {
+  background: rgba(255, 255, 255, 0.78);
+}
+
+.bubble.user.voice .voice-time {
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.bubble.user.voice .voice-seek {
+  accent-color: white;
 }
 
 .trace-panel {
@@ -1208,6 +1395,22 @@ body {
   .composer-actions {
     flex-direction: column;
     align-items: stretch;
+  }
+
+  .recorder {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .recorder-actions,
+  .composer-cta {
+    width: 100%;
+  }
+
+  .recorder-btn,
+  .send-btn,
+  .mic-btn {
+    flex: 1;
   }
 
   .composer-toolbar {

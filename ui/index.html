@@ -128,6 +128,31 @@
                 </button>
               </div>
             </div>
+            <div class="toolbar-recorder" id="toolbar-recorder">
+              <div class="toolbar-recorder-status">
+                <span class="recorder-dot idle" id="recorder-dot" aria-hidden="true"></span>
+                <span class="recorder-time" id="recorder-time">0:00</span>
+              </div>
+              <button class="mic-btn" id="record-btn" type="button" aria-label="Grabar audio" title="Grabar audio">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                     stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M12 3a3 3 0 0 1 3 3v6a3 3 0 0 1-6 0V6a3 3 0 0 1 3-3Z" />
+                  <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
+                  <path d="M12 19v3" />
+                  <path d="M8 22h8" />
+                </svg>
+              </button>
+            </div>
+          </div>
+          <div class="recorder" id="recorder" hidden>
+            <div class="recorder-status">
+              <span class="recorder-text" id="recorder-text">Grabando…</span>
+            </div>
+            <div class="recorder-actions">
+              <button class="recorder-btn" id="recorder-toggle" type="button">Pausar</button>
+              <button class="recorder-btn primary" id="recorder-send" type="button">Enviar audio</button>
+              <button class="recorder-btn danger" id="recorder-delete" type="button">Borrar</button>
+            </div>
           </div>
           <textarea
             id="input"
@@ -137,13 +162,15 @@
           ></textarea>
           <div class="composer-actions">
             <div class="hint">Enter para enviar · Shift + Enter para salto de línea</div>
-            <button class="send-btn" id="send" type="submit" aria-label="Enviar mensaje" title="Enviar (Enter)">
-              <span class="btn-label">Enviar</span>
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                   stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M5 12h14M13 6l6 6-6 6" />
-              </svg>
-            </button>
+            <div class="composer-cta">
+              <button class="send-btn" id="send" type="submit" aria-label="Enviar mensaje" title="Enviar (Enter)">
+                <span class="btn-label">Enviar</span>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                     stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M5 12h14M13 6l6 6-6 6" />
+                </svg>
+              </button>
+            </div>
           </div>
         </form>
       </section>

@@ -71,6 +71,13 @@ class VoiceCfg(BaseModel):
     use_speaker_boost: bool = True
     timeout_seconds: float = 30.0
 
+
+class SttCfg(BaseModel):
+    """Speech-to-text settings for incoming customer audio."""
+
+    model: str = "gpt-4o-mini-transcribe"
+    timeout_seconds: float = 30.0
+
 class Settings(BaseSettings):
     """Top-level application settings object."""
 
@@ -90,6 +97,7 @@ class Settings(BaseSettings):
     rag: RagCfg = RagCfg()
     compaction: CompactionCfg = CompactionCfg()
     voice: VoiceCfg = VoiceCfg()
+    stt: SttCfg = SttCfg()
 
     @classmethod
     def settings_customise_sources(

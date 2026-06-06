@@ -26,6 +26,19 @@ const COPY = {
     responseModeVoice: "Voz",
     hint: "Enter para enviar · Shift + Enter para salto de línea",
     send: "Enviar",
+    recordAudio: "Grabar audio",
+    recorderIdle: "Listo para grabar",
+    recorderRecording: "Grabando…",
+    recorderPaused: "Grabacion en pausa",
+    recorderResume: "Reanudar",
+    recorderPause: "Pausar",
+    recorderSend: "Enviar audio",
+    recorderDelete: "Borrar",
+    recorderSending: "Enviando audio…",
+    recorderUnsupported: "Este navegador no permite grabar audio desde el microfono.",
+    recorderPermissionError: "No se pudo acceder al microfono del sistema.",
+    audioSent: (duration) => `Audio enviado · ${duration}`,
+    userAudioMeta: "Tu audio",
     traceTitle: "Actividad del agente",
     traceSub: "Cada turno muestra modelo, herramientas y respuesta",
     clearTraceTitle: "Limpiar trazas",
@@ -104,6 +117,19 @@ const COPY = {
     responseModeVoice: "Voice",
     hint: "Enter to send · Shift + Enter for a new line",
     send: "Send",
+    recordAudio: "Record audio",
+    recorderIdle: "Ready to record",
+    recorderRecording: "Recording…",
+    recorderPaused: "Recording paused",
+    recorderResume: "Resume",
+    recorderPause: "Pause",
+    recorderSend: "Send audio",
+    recorderDelete: "Delete",
+    recorderSending: "Sending audio…",
+    recorderUnsupported: "This browser cannot record audio from the microphone.",
+    recorderPermissionError: "Could not access the system microphone.",
+    audioSent: (duration) => `Audio sent · ${duration}`,
+    userAudioMeta: "Your audio",
     traceTitle: "Agent activity",
     traceSub: "Each turn shows model, tools, and response",
     clearTraceTitle: "Clear traces",
@@ -175,6 +201,14 @@ const el = {
   replyMode: document.getElementById("reply-mode"),
   replyModeLabel: document.getElementById("reply-mode-label"),
   replyModeButtons: Array.from(document.querySelectorAll(".reply-mode-btn")),
+  recorderDot: document.getElementById("recorder-dot"),
+  recorder: document.getElementById("recorder"),
+  recorderText: document.getElementById("recorder-text"),
+  recorderTime: document.getElementById("recorder-time"),
+  recorderToggle: document.getElementById("recorder-toggle"),
+  recorderSend: document.getElementById("recorder-send"),
+  recorderDelete: document.getElementById("recorder-delete"),
+  recordBtn: document.getElementById("record-btn"),
   hint: document.querySelector(".hint"),
   sendLabel: document.querySelector(".btn-label"),
   send: document.getElementById("send"),
@@ -214,6 +248,16 @@ const state = {
   activeAudioWave: null,
   activeAudioSeek: null,
   activeAudioTime: null,
+  mediaRecorder: null,
+  recordingStream: null,
+  recordingChunks: [],
+  recordingBlob: null,
+  recordingMimeType: "audio/webm",
+  recordingStatus: "idle",
+  recordingElapsedMs: 0,
+  recordingStartedAt: 0,
+  recordingTimer: null,
+  recordingStopResolve: null,
 };
 
 function t() {
@@ -260,8 +304,327 @@ function formatDuration(seconds) {
   return `${mins}:${secs}`;
 }
 
+function formatDurationMs(ms) {
+  return formatDuration(Math.round(ms / 1000));
+}
+
 function scrollToEnd(container) {
   container.scrollTop = container.scrollHeight;
+}
+
+function preferredRecordingMimeType() {
+  if (typeof MediaRecorder === "undefined") return "";
+  const candidates = [
+    "audio/webm;codecs=opus",
+    "audio/webm",
+    "audio/ogg;codecs=opus",
+    "audio/ogg",
+    "audio/mp4",
+  ];
+  for (const candidate of candidates) {
+    if (typeof MediaRecorder.isTypeSupported !== "function" || MediaRecorder.isTypeSupported(candidate)) {
+      return candidate;
+    }
+  }
+  return "";
+}
+
+function recordingDurationMs() {
+  if (state.recordingStatus !== "recording") {
+    return state.recordingElapsedMs;
+  }
+  return state.recordingElapsedMs + Math.max(0, Date.now() - state.recordingStartedAt);
+}
+
+function stopRecordingTimer() {
+  if (state.recordingTimer) {
+    clearInterval(state.recordingTimer);
+    state.recordingTimer = null;
+  }
+}
+
+function startRecordingTimer() {
+  stopRecordingTimer();
+  state.recordingTimer = setInterval(() => {
+    el.recorderTime.textContent = formatDurationMs(recordingDurationMs());
+  }, 250);
+}
+
+function stopRecordingTracks() {
+  if (!state.recordingStream) return;
+  for (const track of state.recordingStream.getTracks()) {
+    track.stop();
+  }
+  state.recordingStream = null;
+}
+
+function resetRecorderState() {
+  stopRecordingTimer();
+  stopRecordingTracks();
+  state.mediaRecorder = null;
+  state.recordingChunks = [];
+  state.recordingBlob = null;
+  state.recordingMimeType = "audio/webm";
+  state.recordingStatus = "idle";
+  state.recordingElapsedMs = 0;
+  state.recordingStartedAt = 0;
+  state.recordingStopResolve = null;
+}
+
+function applyRecorderUI() {
+  const copy = t();
+  const active = state.recordingStatus !== "idle";
+  el.recorder.hidden = !active;
+  el.recordBtn.disabled = state.recordingStatus === "sending";
+  el.recordBtn.title = copy.recordAudio;
+  el.recordBtn.setAttribute("aria-label", copy.recordAudio);
+  el.recorderDot.classList.remove("idle", "recording", "paused", "sending");
+
+  if (!active) {
+    el.recorderDot.classList.add("idle");
+    el.recorderText.textContent = copy.recorderIdle;
+    el.recorderTime.textContent = "0:00";
+    el.recorderToggle.textContent = copy.recorderPause;
+    el.recorderSend.textContent = copy.recorderSend;
+    el.recorderDelete.textContent = copy.recorderDelete;
+    el.recorderToggle.disabled = true;
+    el.recorderSend.disabled = true;
+    el.recorderDelete.disabled = true;
+    return;
+  }
+
+  el.recorderTime.textContent = formatDurationMs(recordingDurationMs());
+  el.recorderSend.textContent = copy.recorderSend;
+  el.recorderDelete.textContent = copy.recorderDelete;
+
+  if (state.recordingStatus === "recording") {
+    el.recorderDot.classList.add("recording");
+    el.recorderText.textContent = copy.recorderRecording;
+    el.recorderToggle.textContent = copy.recorderPause;
+    el.recorderToggle.disabled = false;
+    el.recorderSend.disabled = false;
+    el.recorderDelete.disabled = false;
+    return;
+  }
+
+  if (state.recordingStatus === "paused") {
+    el.recorderDot.classList.add("paused");
+    el.recorderText.textContent = copy.recorderPaused;
+    el.recorderToggle.textContent = copy.recorderResume;
+    el.recorderToggle.disabled = false;
+    el.recorderSend.disabled = false;
+    el.recorderDelete.disabled = false;
+    return;
+  }
+
+  if (state.recordingStatus === "sending") {
+    el.recorderDot.classList.add("sending");
+    el.recorderText.textContent = copy.recorderSending;
+    el.recorderToggle.textContent = copy.recorderPause;
+    el.recorderToggle.disabled = true;
+    el.recorderSend.disabled = true;
+    el.recorderDelete.disabled = true;
+  }
+}
+
+function recorderFilename() {
+  if (state.recordingMimeType.includes("ogg")) return "recording.ogg";
+  if (state.recordingMimeType.includes("mp4")) return "recording.m4a";
+  return "recording.webm";
+}
+
+async function blobToBase64(blob) {
+  const buffer = await blob.arrayBuffer();
+  let binary = "";
+  const bytes = new Uint8Array(buffer);
+  const chunkSize = 0x8000;
+  for (let index = 0; index < bytes.length; index += chunkSize) {
+    binary += String.fromCharCode(...bytes.subarray(index, index + chunkSize));
+  }
+  return btoa(binary);
+}
+
+function waitForRecorderStop() {
+  return new Promise((resolve) => {
+    state.recordingStopResolve = resolve;
+  });
+}
+
+function finalizeRecordingBlob() {
+  if (!state.recordingChunks.length) return null;
+  return new Blob(state.recordingChunks, { type: state.recordingMimeType || "audio/webm" });
+}
+
+async function startRecording() {
+  if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === "undefined") {
+    addBubble("agent", t().recorderUnsupported, { error: true });
+    return;
+  }
+
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    const mimeType = preferredRecordingMimeType();
+    const recorder = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream);
+
+    state.recordingStream = stream;
+    state.mediaRecorder = recorder;
+    state.recordingChunks = [];
+    state.recordingBlob = null;
+    state.recordingMimeType = recorder.mimeType || mimeType || "audio/webm";
+    state.recordingElapsedMs = 0;
+    state.recordingStartedAt = Date.now();
+    state.recordingStatus = "recording";
+    applyRecorderUI();
+    startRecordingTimer();
+
+    recorder.addEventListener("dataavailable", (event) => {
+      if (event.data && event.data.size > 0) {
+        state.recordingChunks.push(event.data);
+      }
+    });
+
+    recorder.addEventListener("pause", () => {
+      state.recordingElapsedMs = recordingDurationMs();
+      state.recordingStartedAt = 0;
+      state.recordingBlob = finalizeRecordingBlob();
+      state.recordingStatus = "paused";
+      stopRecordingTimer();
+      applyRecorderUI();
+    });
+
+    recorder.addEventListener("resume", () => {
+      state.recordingStartedAt = Date.now();
+      state.recordingStatus = "recording";
+      startRecordingTimer();
+      applyRecorderUI();
+    });
+
+    recorder.addEventListener("stop", () => {
+      state.recordingElapsedMs = recordingDurationMs();
+      state.recordingStartedAt = 0;
+      state.recordingBlob = finalizeRecordingBlob();
+      stopRecordingTimer();
+      stopRecordingTracks();
+      if (typeof state.recordingStopResolve === "function") {
+        state.recordingStopResolve(state.recordingBlob);
+        state.recordingStopResolve = null;
+      }
+      if (state.recordingStatus !== "sending") {
+        state.recordingStatus = state.recordingBlob ? "paused" : "idle";
+        applyRecorderUI();
+      }
+    });
+
+    recorder.start(250);
+  } catch {
+    resetRecorderState();
+    applyRecorderUI();
+    addBubble("agent", t().recorderPermissionError, { error: true });
+  }
+}
+
+async function toggleRecorder() {
+  const recorder = state.mediaRecorder;
+  if (!recorder) return;
+  if (state.recordingStatus === "recording") {
+    recorder.pause();
+    recorder.requestData();
+    return;
+  }
+  if (state.recordingStatus === "paused") {
+    recorder.resume();
+  }
+}
+
+async function deleteRecording() {
+  const recorder = state.mediaRecorder;
+  if (recorder && recorder.state !== "inactive") {
+    state.recordingChunks = [];
+    recorder.stop();
+  }
+  resetRecorderState();
+  applyRecorderUI();
+}
+
+async function ensureRecordingBlob() {
+  if (state.recordingBlob) return state.recordingBlob;
+  const recorder = state.mediaRecorder;
+  if (!recorder) return null;
+  if (recorder.state !== "inactive") {
+    const stopped = waitForRecorderStop();
+    recorder.stop();
+    return stopped;
+  }
+  state.recordingBlob = finalizeRecordingBlob();
+  return state.recordingBlob;
+}
+
+function renderAgentTurn(data, fallbackUserText) {
+  const output = data.output || { mode: "text", text: data.reply };
+  if (output.mode === "voice" && output.audio_base64) {
+    addVoiceBubble(output, { role: "agent" });
+  } else {
+    addBubble("agent", output.text || data.reply || t().noReply, {
+      metaText: output.voice_error ? `${t().agentMeta} · ${t().voiceFallback}` : "",
+    });
+  }
+  renderTrace(data.input_text || fallbackUserText, data);
+}
+
+async function sendRecordedAudio() {
+  if (state.recordingStatus !== "paused" && state.recordingStatus !== "recording") return;
+  const blob = await ensureRecordingBlob();
+  if (!blob) return;
+
+  const duration = formatDurationMs(state.recordingElapsedMs);
+  const mimeType = blob.type || state.recordingMimeType || "audio/webm";
+  const filename = recorderFilename();
+  const audioBase64 = await blobToBase64(blob);
+
+  state.recordingStatus = "sending";
+  applyRecorderUI();
+  el.send.disabled = true;
+  addVoiceBubble(
+    {
+      audio_base64: audioBase64,
+      mime_type: mimeType,
+      voice_label: t().userAudioMeta,
+    },
+    { role: "user", metaText: `${t().userMeta} · ${t().userAudioMeta} · ${duration}` },
+  );
+  const typing = addTyping();
+
+  try {
+    const res = await fetch(`${API}/chat/audio`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        session_id: state.sessionId,
+        audio_base64: audioBase64,
+        mime_type: mimeType,
+        filename,
+        lang: state.lang,
+        response_mode: state.responseMode,
+      }),
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+
+    typing.remove();
+    renderAgentTurn(data, t().audioSent(duration));
+    setStatus(true);
+  } catch (err) {
+    typing.remove();
+    const message = t().contactError(err.message);
+    addBubble("agent", message, { error: true });
+    renderTrace(t().audioSent(duration), { error: message, reply: message, trace: {}, input_text: t().audioSent(duration) });
+    setStatus(false);
+  } finally {
+    resetRecorderState();
+    applyRecorderUI();
+    el.send.disabled = false;
+    el.input.focus();
+  }
 }
 
 function escapeHtml(text) {
@@ -533,12 +896,13 @@ function seekAudio(audio, nextTime) {
   audio.currentTime = clampTime(nextTime, duration);
 }
 
-function addVoiceBubble(output) {
+function addVoiceBubble(output, { role = "agent", metaText = "" } = {}) {
   if (el.empty) el.empty.remove();
 
-  const bubble = node("div", "bubble agent voice");
+  const bubble = node("div", `bubble ${role} voice`);
   const voiceLabel = output.voice_label || t().voiceMeta;
-  const meta = node("div", "bubble-meta", `${t().agentMeta} · ${voiceLabel}`);
+  const defaultMeta = role === "user" ? `${t().userMeta} · ${voiceLabel}` : `${t().agentMeta} · ${voiceLabel}`;
+  const meta = node("div", "bubble-meta", metaText || defaultMeta);
   const player = node("div", "voice-player");
   const transport = node("div", "voice-transport");
   const button = document.createElement("button");
@@ -855,17 +1219,9 @@ async function sendMessage() {
     });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json();
-    const output = data.output || { mode: "text", text: data.reply };
 
     typing.remove();
-    if (output.mode === "voice" && output.audio_base64) {
-      addVoiceBubble(output);
-    } else {
-      addBubble("agent", output.text || data.reply || t().noReply, {
-        metaText: output.voice_error ? `${t().agentMeta} · ${t().voiceFallback}` : "",
-      });
-    }
-    renderTrace(text, data);
+    renderAgentTurn(data, text);
     setStatus(true);
   } catch (err) {
     typing.remove();
@@ -883,6 +1239,7 @@ async function sendMessage() {
 
 function resetConversation() {
   stopActiveVoice();
+  deleteRecording();
   state.sessionId = newSessionId();
   state.turn = 0;
   state.totals = { calls: 0, inTokens: 0, outTokens: 0, tools: 0 };
@@ -940,6 +1297,8 @@ function applyLanguage(copyChanged = false) {
   el.reset.title = copy.resetTitle;
   el.reset.setAttribute("aria-label", copy.resetTitle);
   el.input.placeholder = copy.inputPlaceholder;
+  el.recordBtn.title = copy.recordAudio;
+  el.recordBtn.setAttribute("aria-label", copy.recordAudio);
   el.replyMode.setAttribute("aria-label", copy.responseModeLabel);
   el.replyModeLabel.textContent = copy.responseModeLabel;
   for (const button of el.replyModeButtons) {
@@ -967,6 +1326,7 @@ function applyLanguage(copyChanged = false) {
     option.classList.toggle("active", active);
     option.setAttribute("aria-checked", active ? "true" : "false");
   }
+  applyRecorderUI();
   if (copyChanged) {
     resetConversation();
     addBubble("agent", copy.languageChanged);
@@ -1023,6 +1383,18 @@ el.composer.addEventListener("submit", (e) => {
   e.preventDefault();
   sendMessage();
 });
+el.recordBtn.addEventListener("click", () => {
+  startRecording();
+});
+el.recorderToggle.addEventListener("click", () => {
+  toggleRecorder();
+});
+el.recorderDelete.addEventListener("click", () => {
+  deleteRecording();
+});
+el.recorderSend.addEventListener("click", () => {
+  sendRecordedAudio();
+});
 el.langTrigger.addEventListener("click", (e) => {
   e.stopPropagation();
   toggleLangMenu();
@@ -1048,5 +1420,6 @@ el.traceClear.addEventListener("click", clearTraces);
 
 applyLanguage(false);
 setResponseMode(state.responseMode);
+applyRecorderUI();
 checkHealth();
 el.input.focus();
