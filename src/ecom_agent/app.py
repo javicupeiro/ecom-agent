@@ -11,6 +11,7 @@ from ecom_agent.db.orders import OrdersDB
 from ecom_agent.providers.factory import build_provider
 from ecom_agent.orchestrator import Conversation
 from ecom_agent.rag.index import KnowledgeBase
+from ecom_agent.permissions import AllowList
 
 app = FastAPI(title="SaborMix Agent")
 app.add_middleware(
@@ -48,6 +49,7 @@ def _conversation(session_id: str, lang: str) -> Conversation:
     if conv is None or conv.lang != lang:
         conv = Conversation(
             provider, db=db, kb=kb, lang=lang, session_id=session_id,
+            policy=AllowList(["query_orders", "search_knowledge_base"]),
             max_steps=settings.agent.max_steps,
         )
         _sessions[session_id] = conv

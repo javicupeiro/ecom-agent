@@ -78,8 +78,9 @@ class OrdersDB:
                      merged["status"], merged["order_id"]),
                 )
                 return "updated"
+            cols = [c for c in COLUMNS if c in order]
             conn.execute(
-                f"INSERT INTO orders VALUES ({','.join('?' * 8)})",
-                tuple(order.get(c) for c in COLUMNS),
+                f"INSERT INTO orders ({','.join(cols)}) VALUES ({','.join('?' * len(cols))})",
+                tuple(order[c] for c in cols),
             )
             return "created"
