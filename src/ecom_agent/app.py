@@ -39,10 +39,11 @@ class ChatIn(BaseModel):
 
 @app.post("/chat")
 def chat(body: ChatIn) -> dict:
-    if body.session_id not in _sessions:
+    requested_lang = body.lang or settings.agent.default_language
+    if body.session_id not in _sessions or _sessions[body.session_id].lang != requested_lang:
         _sessions[body.session_id] = Conversation(
             provider,
-            lang=body.lang or settings.agent.default_language,
+            lang=requested_lang,
             max_steps=settings.agent.max_steps,
         )
     result = _sessions[body.session_id].send(body.message)

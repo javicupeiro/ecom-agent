@@ -4,29 +4,143 @@
 
 const API = "";
 
+const COPY = {
+  es: {
+    documentTitle: "SaborMix · Plataforma de Agentes",
+    brandTitle: "SaborMix · Plataforma de Agentes",
+    brandSub: "Chat comercial · recetas · soporte técnico",
+    langLabel: "Español",
+    langMenuTitle: "Seleccionar idioma",
+    statusConnecting: "Conectando…",
+    statusConnected: "Conectado",
+    statusDisconnected: "Sin conexión",
+    modelTitle: "Modelo activo",
+    resetTitle: "Nueva conversación",
+    tabAriaLabel: "Agentes",
+    tabPill: "Agente conversacional",
+    emptyTitle: "Pega o escribe tu consulta",
+    emptySub: "El agente responderá sobre productos SaborMix, recetas y soporte con trazas visibles para cada llamada al modelo y a las herramientas.",
+    inputPlaceholder: "Escribe tu mensaje…",
+    hint: "Enter para enviar · Shift + Enter para salto de línea",
+    send: "Enviar",
+    traceTitle: "Actividad del agente",
+    traceSub: "Cada turno muestra modelo, herramientas y respuesta",
+    clearTraceTitle: "Limpiar trazas",
+    panelEmptyTitle: "Sin actividad aún",
+    panelEmptySub: "El resumen estructurado del turno aparecerá aquí cuando envíes el primer mensaje.",
+    statCalls: "Llamadas",
+    statTokens: "Tokens",
+    statTools: "Herramientas",
+    userMeta: "Tú",
+    agentMeta: "SaborMix",
+    turn: "Turno",
+    eventUser: "usuario",
+    eventModel: "modelo",
+    eventReply: "respuesta",
+    eventError: "error",
+    eventUserLabel: "Mensaje recibido",
+    eventModelLabel: "El modelo razona y decide",
+    eventModelMeta: (calls) => `${calls} llamada(s) al proveedor`,
+    eventReplyLabel: "Respuesta enviada",
+    eventErrorLabel: "Fallo en el turno",
+    toolError: "error",
+    toolOk: "ok",
+    noReply: "(sin respuesta)",
+    contactError: (message) => `No se pudo contactar con el agente (${message}).`,
+    inputPrefix: "input",
+    languageChanged: "Idioma cambiado a Español. Se ha iniciado una conversación nueva.",
+  },
+  en: {
+    documentTitle: "SaborMix · Agent Platform",
+    brandTitle: "SaborMix · Agent Platform",
+    brandSub: "Sales chat · recipes · technical support",
+    langLabel: "English",
+    langMenuTitle: "Select language",
+    statusConnecting: "Connecting…",
+    statusConnected: "Connected",
+    statusDisconnected: "Offline",
+    modelTitle: "Active model",
+    resetTitle: "New conversation",
+    tabAriaLabel: "Agents",
+    tabPill: "Conversational agent",
+    emptyTitle: "Paste or type your request",
+    emptySub: "The agent will answer about SaborMix products, recipes, and support with visible traces for each model and tool call.",
+    inputPlaceholder: "Type your message…",
+    hint: "Enter to send · Shift + Enter for a new line",
+    send: "Send",
+    traceTitle: "Agent activity",
+    traceSub: "Each turn shows model, tools, and response",
+    clearTraceTitle: "Clear traces",
+    panelEmptyTitle: "No activity yet",
+    panelEmptySub: "The structured turn summary will appear here when you send the first message.",
+    statCalls: "Calls",
+    statTokens: "Tokens",
+    statTools: "Tools",
+    userMeta: "You",
+    agentMeta: "SaborMix",
+    turn: "Turn",
+    eventUser: "user",
+    eventModel: "model",
+    eventReply: "reply",
+    eventError: "error",
+    eventUserLabel: "Message received",
+    eventModelLabel: "The model reasons and decides",
+    eventModelMeta: (calls) => `${calls} provider call(s)`,
+    eventReplyLabel: "Reply sent",
+    eventErrorLabel: "Turn failed",
+    toolError: "error",
+    toolOk: "ok",
+    noReply: "(no response)",
+    contactError: (message) => `Could not contact the agent (${message}).`,
+    inputPrefix: "input",
+    languageChanged: "Language changed to English. A new conversation has been started.",
+  },
+};
+
 const el = {
+  brandTitle: document.querySelector(".brand-title"),
+  brandSub: document.querySelector(".brand-sub"),
+  tabbar: document.querySelector(".tabbar"),
+  tabPill: document.querySelector(".tabbar-pill"),
   chat: document.getElementById("chat"),
   composer: document.getElementById("composer"),
   empty: document.getElementById("empty-state"),
   input: document.getElementById("input"),
+  hint: document.querySelector(".hint"),
+  sendLabel: document.querySelector(".btn-label"),
   send: document.getElementById("send"),
   reset: document.getElementById("reset-btn"),
   trace: document.getElementById("trace"),
   traceEmpty: document.getElementById("trace-empty"),  // panel-empty div; removed on first trace
   traceClear: document.getElementById("trace-clear"),
+  traceTitle: document.querySelector(".trace-title"),
+  traceSub: document.querySelector(".trace-sub"),
   status: document.getElementById("status"),
   statusText: document.getElementById("status-text"),
   modelPill: document.getElementById("model-pill"),
   statCalls: document.getElementById("stat-calls"),
   statTokens: document.getElementById("stat-tokens"),
   statTools: document.getElementById("stat-tools"),
+  statCallsWrap: document.getElementById("stat-calls").parentElement,
+  statTokensWrap: document.getElementById("stat-tokens").parentElement,
+  statToolsWrap: document.getElementById("stat-tools").parentElement,
+  langMenu: document.getElementById("lang-menu"),
+  langTrigger: document.getElementById("lang-trigger"),
+  langTriggerLabel: document.getElementById("lang-trigger-label"),
+  langDropdown: document.getElementById("lang-dropdown"),
+  langOptions: Array.from(document.querySelectorAll(".lang-option")),
 };
 
 const state = {
   sessionId: newSessionId(),
+  lang: "es",
   turn: 0,
   totals: { calls: 0, inTokens: 0, outTokens: 0, tools: 0 },
 };
+
+function t() {
+  return COPY[state.lang];
+}
 
 function newSessionId() {
   return "web-" + Math.random().toString(36).slice(2, 10);
@@ -47,7 +161,8 @@ function truncate(value, max = 800) {
 }
 
 function nowTime() {
-  return new Date().toLocaleTimeString("es-ES", { hour12: false });
+  const locale = state.lang === "en" ? "en-US" : "es-ES";
+  return new Date().toLocaleTimeString(locale, { hour12: false });
 }
 
 function scrollToEnd(container) {
@@ -59,7 +174,7 @@ function scrollToEnd(container) {
 function addBubble(role, text, { error = false } = {}) {
   if (el.empty) el.empty.remove();
   const bubble = node("div", `bubble ${role}${error ? " error" : ""}`);
-  const meta = node("div", "bubble-meta", role === "user" ? "Tú" : "SaborMix");
+  const meta = node("div", "bubble-meta", role === "user" ? t().userMeta : t().agentMeta);
   const body = node("div", "bubble-body", text);
   bubble.append(meta, body);
   el.chat.appendChild(bubble);
@@ -110,7 +225,7 @@ function renderTrace(userText, data) {
   const turn = node("div", "trace-turn");
 
   const head = node("div", "trace-turn-head");
-  head.appendChild(node("span", "turn-index", `Turno ${state.turn}`));
+  head.appendChild(node("span", "turn-index", `${t().turn} ${state.turn}`));
   const headRight = node("span", "turn-time",
     `↑${usage.input_tokens} ↓${usage.output_tokens} · ${nowTime()}`);
   head.appendChild(headRight);
@@ -118,32 +233,28 @@ function renderTrace(userText, data) {
 
   const events = node("div", "trace-events");
 
-  // 1) The user request that started the turn.
-  events.appendChild(evt("usuario", "request", "Mensaje recibido", { detail: userText }));
+  events.appendChild(evt(t().eventUser, "request", t().eventUserLabel, { detail: userText }));
 
-  // 2) The agent loop: the model reasons and may call tools.
   events.appendChild(
-    evt("modelo", "llm", "El modelo razona y decide", {
-      meta: `${calls} llamada(s) al proveedor`,
+    evt(t().eventModel, "llm", t().eventModelLabel, {
+      meta: t().eventModelMeta(calls),
     }),
   );
 
-  // 3) Each tool the model invoked, with input and result.
   for (const step of steps) {
-    const detail = `input: ${truncate(step.input)}\n→ ${truncate(step.result)}`;
+    const detail = `${t().inputPrefix}: ${truncate(step.input)}\n→ ${truncate(step.result)}`;
     events.appendChild(
       evt("tool", `tool${step.error ? " error" : ""}`, step.tool, {
         detail,
-        tag: step.error ? { ok: false, text: "error" } : { ok: true, text: "ok" },
+        tag: step.error ? { ok: false, text: t().toolError } : { ok: true, text: t().toolOk },
       }),
     );
   }
 
-  // 4) The final answer (or error).
   if (data.error) {
-    events.appendChild(evt("error", "error", "Fallo en el turno", { detail: data.error }));
+    events.appendChild(evt(t().eventError, "error", t().eventErrorLabel, { detail: data.error }));
   } else {
-    events.appendChild(evt("respuesta", "reply", "Respuesta enviada", { detail: truncate(data.reply) }));
+    events.appendChild(evt(t().eventReply, "reply", t().eventReplyLabel, { detail: truncate(data.reply) }));
   }
 
   turn.appendChild(events);
@@ -177,7 +288,7 @@ async function checkHealth() {
 function setStatus(ok) {
   el.status.classList.toggle("ok", ok);
   el.status.classList.toggle("err", !ok);
-  el.statusText.textContent = ok ? "Conectado" : "Sin conexión";
+  el.statusText.textContent = ok ? t().statusConnected : t().statusDisconnected;
 }
 
 async function sendMessage() {
@@ -194,18 +305,18 @@ async function sendMessage() {
     const res = await fetch(`${API}/chat`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ session_id: state.sessionId, message: text }),
+      body: JSON.stringify({ session_id: state.sessionId, message: text, lang: state.lang }),
     });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json();
 
     typing.remove();
-    addBubble("agent", data.reply || "(sin respuesta)");
+    addBubble("agent", data.reply || t().noReply);
     renderTrace(text, data);
     setStatus(true);
   } catch (err) {
     typing.remove();
-    const message = `No se pudo contactar con el agente (${err.message}).`;
+    const message = t().contactError(err.message);
     addBubble("agent", message, { error: true });
     renderTrace(text, { error: message, reply: message, trace: {} });
     setStatus(false);
@@ -230,10 +341,9 @@ function resetConversation() {
 function emptyState() {
   const wrap = node("div", "empty-state");
   wrap.id = "empty-state";
-  wrap.appendChild(node("div", "empty-title", "Pega o escribe tu consulta"));
+  wrap.appendChild(node("div", "empty-title", t().emptyTitle));
   wrap.appendChild(
-    node("div", "empty-sub",
-      "El agente responderá sobre productos SaborMix, recetas y soporte con trazas visibles para cada llamada al modelo y a las herramientas."),
+    node("div", "empty-sub", t().emptySub),
   );
   el.empty = wrap;
   return wrap;
@@ -250,8 +360,8 @@ function clearTraces() {
         <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
       </svg>
     </div>
-    <div class="pe-title">Sin actividad aún</div>
-    <div class="pe-sub">El resumen estructurado del turno aparecerá aquí cuando envíes el primer mensaje.</div>
+    <div class="pe-title">${t().panelEmptyTitle}</div>
+    <div class="pe-sub">${t().panelEmptySub}</div>
   `;
   el.trace.appendChild(wrap);
   el.traceEmpty = wrap;
@@ -259,6 +369,65 @@ function clearTraces() {
   el.statCalls.textContent = "0";
   el.statTokens.textContent = "0 / 0";
   el.statTools.textContent = "0";
+}
+
+function applyLanguage(copyChanged = false) {
+  const copy = t();
+  document.documentElement.lang = state.lang;
+  document.title = copy.documentTitle;
+  el.brandTitle.textContent = copy.brandTitle;
+  el.brandSub.textContent = copy.brandSub;
+  el.tabbar.setAttribute("aria-label", copy.tabAriaLabel);
+  el.tabPill.textContent = copy.tabPill;
+  el.statusText.textContent = copy.statusConnecting;
+  el.modelPill.title = copy.modelTitle;
+  el.reset.title = copy.resetTitle;
+  el.reset.setAttribute("aria-label", copy.resetTitle);
+  el.input.placeholder = copy.inputPlaceholder;
+  el.hint.textContent = copy.hint;
+  el.sendLabel.textContent = copy.send;
+  el.send.title = `${copy.send} (Enter)`;
+  el.send.setAttribute("aria-label", copy.send);
+  el.traceTitle.textContent = copy.traceTitle;
+  el.traceSub.textContent = copy.traceSub;
+  el.traceClear.title = copy.clearTraceTitle;
+  el.traceClear.setAttribute("aria-label", copy.clearTraceTitle);
+  el.statCallsWrap.firstChild.textContent = `${copy.statCalls} `;
+  el.statTokensWrap.firstChild.textContent = `${copy.statTokens} `;
+  el.statToolsWrap.firstChild.textContent = `${copy.statTools} `;
+  el.langTrigger.title = copy.langMenuTitle;
+  el.langTriggerLabel.textContent = copy.langLabel;
+  for (const option of el.langOptions) {
+    const active = option.dataset.lang === state.lang;
+    option.classList.toggle("active", active);
+    option.setAttribute("aria-checked", active ? "true" : "false");
+  }
+  if (copyChanged) {
+    resetConversation();
+    addBubble("agent", copy.languageChanged);
+  } else {
+    clearTraces();
+    el.chat.innerHTML = "";
+    el.chat.appendChild(emptyState());
+  }
+}
+
+function toggleLangMenu(forceOpen) {
+  const open = forceOpen ?? !el.langMenu.classList.contains("open");
+  el.langMenu.classList.toggle("open", open);
+  el.langTrigger.setAttribute("aria-expanded", open ? "true" : "false");
+  el.langDropdown.hidden = !open;
+}
+
+function setLanguage(lang) {
+  if (!COPY[lang] || lang === state.lang) {
+    toggleLangMenu(false);
+    return;
+  }
+  state.lang = lang;
+  toggleLangMenu(false);
+  applyLanguage(true);
+  checkHealth();
 }
 
 // ───────── Input behavior ─────────
@@ -279,8 +448,22 @@ el.composer.addEventListener("submit", (e) => {
   e.preventDefault();
   sendMessage();
 });
+el.langTrigger.addEventListener("click", () => {
+  toggleLangMenu();
+});
+for (const option of el.langOptions) {
+  option.addEventListener("click", () => {
+    setLanguage(option.dataset.lang);
+  });
+}
+document.addEventListener("click", (e) => {
+  if (!el.langMenu.contains(e.target)) {
+    toggleLangMenu(false);
+  }
+});
 el.reset.addEventListener("click", resetConversation);
 el.traceClear.addEventListener("click", clearTraces);
 
+applyLanguage(false);
 checkHealth();
 el.input.focus();
