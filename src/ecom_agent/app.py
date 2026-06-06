@@ -13,6 +13,7 @@ from ecom_agent.orchestrator import Conversation
 from ecom_agent.rag.index import KnowledgeBase
 from ecom_agent.permissions import AllowList
 from ecom_agent.memory.store import JSONFileStore
+from ecom_agent.compaction.factory import build_compactor
 
 app = FastAPI(title="SaborMix Agent")
 app.add_middleware(
@@ -28,6 +29,7 @@ kb = KnowledgeBase(
     settings.rag.embedding_model, settings.rag.top_k,
 )
 store = JSONFileStore()
+compactor = build_compactor(settings, provider)
 
 SYSTEM_PROMPT = (
     "You are a helpful assistant for SaborMix, a kitchen robot brand. "
@@ -52,6 +54,7 @@ def _conversation(session_id: str, lang: str) -> Conversation:
         conv = Conversation(
             provider, db=db, kb=kb, lang=lang, store=store, session_id=session_id,
             policy=AllowList(["query_orders", "search_knowledge_base"]),
+            compactor=compactor,
             max_steps=settings.agent.max_steps,
         )
         _sessions[session_id] = conv

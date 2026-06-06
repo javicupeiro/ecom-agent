@@ -19,4 +19,9 @@ kb_root = "SaborMix"
 collection = "sabormix"
 persist_dir = "./.data/chroma"
 embedding_model = "text-embedding-3-small"
-top_k = 6
+top_k = 10
+
+[compaction]
+strategy = "summarize"   # none | sliding | summarize
+threshold = 20
+keep_recent = 6

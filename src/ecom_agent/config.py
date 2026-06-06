@@ -38,7 +38,12 @@ class RagCfg(BaseModel):
     collection: str = "sabormix"
     persist_dir: str = "./.data/chroma"
     embedding_model: str = "text-embedding-3-small"
-    top_k: int = 6
+    top_k: int = 10
+
+class CompactionCfg(BaseModel):
+    strategy: str = "none"   # none | sliding | summarize
+    threshold: int = 20
+    keep_recent: int = 6
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
@@ -54,7 +59,7 @@ class Settings(BaseSettings):
     agent: AgentCfg = AgentCfg()
     db: DbCfg = DbCfg()
     rag: RagCfg = RagCfg()
-
+    compaction: CompactionCfg = CompactionCfg()
     @classmethod
     def settings_customise_sources(
         cls,

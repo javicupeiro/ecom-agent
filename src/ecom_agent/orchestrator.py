@@ -11,6 +11,7 @@ from ecom_agent.domain.types import Message, ToolResultBlock, Usage
 from ecom_agent.permissions import AlwaysAllow, PermissionPolicy
 from ecom_agent.providers.base import LLMProvider
 from ecom_agent.tools.registry import ToolRegistry, default_registry
+from ecom_agent.compaction.strategy import NoCompaction
 
 SYSTEM_PROMPT = (
     "You are the SaborMix customer agent. You help with sales, recipes and "
@@ -55,6 +56,7 @@ class Conversation:
         store=None,
         session_id: str = "default",
         system_prompt: str = SYSTEM_PROMPT,
+        compactor=None,
         max_steps: int = 6,
     ) -> None:
         self.provider = provider
@@ -68,6 +70,7 @@ class Conversation:
         self.max_steps = max_steps
         self.messages: list[Message] = [Message.system(system_prompt)]
         self.total_usage = Usage()
+        self.compactor = compactor or NoCompaction()
 
     def _ctx(self) -> Ctx:
         return Ctx(
@@ -85,6 +88,7 @@ class Conversation:
             self.store.save(self.session_id, {"role": "user", "text": user_text})
         trace = DebugTrace()
         for _ in range(self.max_steps):
+            self.messages = self.compactor.compact(self.messages)
             resp = self.provider.send(self.messages, self.registry.definitions())
             trace.provider_calls += 1
             trace.usage = trace.usage + resp.usage
