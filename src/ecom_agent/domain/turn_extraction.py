@@ -12,6 +12,7 @@ class TurnExtraction(BaseModel):
     problem_category: str | None = None
     problem_description: str | None = None
     frustration: float = 0.0
+    peak_frustration: float = 0.0
     urgency_level: str | None = None
 
     @field_validator("order_number")
@@ -34,7 +35,7 @@ class TurnExtraction(BaseModel):
         normalized = value.strip()
         return normalized or None
 
-    @field_validator("frustration")
+    @field_validator("frustration", "peak_frustration")
     @classmethod
     def _clamp_frustration(cls, value: float) -> float:
         """Clamp the frustration score to the supported range."""
@@ -48,7 +49,13 @@ class TurnExtraction(BaseModel):
             order_number=update.order_number or self.order_number,
             problem_category=update.problem_category or self.problem_category,
             problem_description=update.problem_description or self.problem_description,
-            frustration=max(self.frustration, update.frustration),
+            frustration=update.frustration,
+            peak_frustration=max(
+                self.peak_frustration,
+                self.frustration,
+                update.peak_frustration,
+                update.frustration,
+            ),
             urgency_level=self._merge_urgency(update.urgency_level),
         )
 

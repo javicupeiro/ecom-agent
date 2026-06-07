@@ -30,6 +30,7 @@ def test_turn_extraction_is_structured() -> None:
     assert result.trace.extraction.problem_category == "shipping"
     assert result.trace.extraction.problem_description == "Order not delivered."
     assert result.trace.extraction.frustration == 0.8
+    assert result.trace.extraction.peak_frustration == 0.8
     assert result.trace.extraction.urgency_level == "high"
 
 
@@ -73,7 +74,46 @@ def test_turn_extraction_accumulates_across_messages() -> None:
     assert second.trace.extraction.problem_category == "shipping"
     assert second.trace.extraction.problem_description == "Order not delivered."
     assert second.trace.extraction.frustration == 0.7
+    assert second.trace.extraction.peak_frustration == 0.7
     assert second.trace.extraction.urgency_level == "high"
+
+
+def test_turn_extraction_keeps_current_and_peak_frustration() -> None:
+    script = [
+        Response(blocks=[TextBlock(text="I understand. Could you confirm the order number?")]),
+        Response(
+            blocks=[
+                TextBlock(
+                    text=(
+                        '{"order_number":"ORD-100200","problem_category":"shipping",'
+                        '"problem_description":"Order not delivered.",'
+                        '"frustration":0.9,"urgency_level":"high"}'
+                    )
+                )
+            ]
+        ),
+        Response(blocks=[TextBlock(text="Thanks. I am already checking it for you.")]),
+        Response(
+            blocks=[
+                TextBlock(
+                    text=(
+                        '{"order_number":null,"problem_category":null,'
+                        '"problem_description":null,"frustration":0.3,'
+                        '"urgency_level":null}'
+                    )
+                )
+            ]
+        ),
+    ]
+    conv = Conversation(MockProvider(script=script))
+
+    first = conv.send("I am really upset, my ORD-100200 has still not arrived.")
+    second = conv.send("Thanks, I am calmer now. Please keep checking.")
+
+    assert first.trace.extraction.frustration == 0.9
+    assert first.trace.extraction.peak_frustration == 0.9
+    assert second.trace.extraction.frustration == 0.3
+    assert second.trace.extraction.peak_frustration == 0.9
 
 
 def test_turn_extraction_persists_structured_case_snapshot(tmp_path) -> None:
@@ -107,5 +147,6 @@ def test_turn_extraction_persists_structured_case_snapshot(tmp_path) -> None:
         "problem_category": "shipping",
         "problem_description": "Order not delivered.",
         "frustration": 0.8,
+        "peak_frustration": 0.8,
         "urgency_level": "high",
     }
