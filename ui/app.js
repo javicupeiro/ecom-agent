@@ -53,6 +53,9 @@ const COPY = {
     eventExtraction: "extraccion",
     eventExtractionLabel: "Parámetros extraídos",
     extractionCardTitle: "Resumen extraído",
+    sessionExtractionTitle: "Estado de la entrevista",
+    sessionExtractionSub: "Los datos estructurados recogidos en la sesión se actualizan aquí.",
+    sessionExtractionEmpty: "Aún no hay datos estructurados en esta sesión.",
     extractionOrderNumber: "Número de pedido",
     extractionProblemCategory: "Categoría",
     extractionProblemDescription: "Descripción",
@@ -144,6 +147,9 @@ const COPY = {
     eventExtraction: "extraction",
     eventExtractionLabel: "Extracted parameters",
     extractionCardTitle: "Extracted summary",
+    sessionExtractionTitle: "Interview state",
+    sessionExtractionSub: "The structured data collected in the session is updated here.",
+    sessionExtractionEmpty: "No structured data has been collected in this session yet.",
     extractionOrderNumber: "Order number",
     extractionProblemCategory: "Category",
     extractionProblemDescription: "Description",
@@ -213,6 +219,10 @@ const el = {
   sendLabel: document.querySelector(".btn-label"),
   send: document.getElementById("send"),
   reset: document.getElementById("reset-btn"),
+  sessionExtraction: document.getElementById("session-extraction"),
+  sessionExtractionTitle: document.getElementById("session-extraction-title"),
+  sessionExtractionSub: document.getElementById("session-extraction-sub"),
+  sessionExtractionBody: document.getElementById("session-extraction-body"),
   trace: document.getElementById("trace"),
   traceEmpty: document.getElementById("trace-empty"),  // panel-empty div; removed on first trace
   traceClear: document.getElementById("trace-clear"),
@@ -258,6 +268,7 @@ const state = {
   recordingStartedAt: 0,
   recordingTimer: null,
   recordingStopResolve: null,
+  latestExtraction: null,
 };
 
 function t() {
@@ -827,6 +838,22 @@ function renderExtractionCard(extraction) {
   wrap.append(title, grid);
   return wrap;
 }
+
+function updateSessionExtraction(extraction = null) {
+  state.latestExtraction = extraction;
+  el.sessionExtractionBody.innerHTML = "";
+
+  if (!extraction) {
+    el.sessionExtractionBody.appendChild(
+      node("div", "session-extraction-empty", t().sessionExtractionEmpty),
+    );
+    return;
+  }
+
+  const card = renderExtractionCard(extraction);
+  card.classList.add("session-extraction-card");
+  el.sessionExtractionBody.appendChild(card);
+}
 function addBubble(role, text, { error = false, metaText = "" } = {}) {
   if (el.empty) el.empty.remove();
   const bubble = node("div", `bubble ${role}${error ? " error" : ""}`);
@@ -1079,6 +1106,7 @@ function renderTrace(userText, data) {
   const traceCalls = trace.calls || [];
   const calls = trace.provider_calls || 0;
   const extraction = trace.extraction || null;
+  if (extraction) updateSessionExtraction(extraction);
 
   const turn = node("div", "trace-turn");
 
@@ -1278,10 +1306,12 @@ function clearTraces() {
   el.trace.appendChild(wrap);
   el.traceEmpty = wrap;
   state.totals = { calls: 0, inTokens: 0, outTokens: 0, tools: 0 };
+  state.latestExtraction = null;
   el.statCalls.textContent = "0";
   el.statTokens.textContent = "0 / 0";
   el.statTools.textContent = "0";
   el.statFrustration.textContent = "—";
+  updateSessionExtraction(null);
 }
 
 function applyLanguage(copyChanged = false) {
@@ -1313,6 +1343,8 @@ function applyLanguage(copyChanged = false) {
   el.send.setAttribute("aria-label", copy.send);
   el.traceTitle.textContent = copy.traceTitle;
   el.traceSub.textContent = copy.traceSub;
+  el.sessionExtractionTitle.textContent = copy.sessionExtractionTitle;
+  el.sessionExtractionSub.textContent = copy.sessionExtractionSub;
   el.traceClear.title = copy.clearTraceTitle;
   el.traceClear.setAttribute("aria-label", copy.clearTraceTitle);
   el.statCallsWrap.firstChild.textContent = `${copy.statCalls} `;
@@ -1327,6 +1359,7 @@ function applyLanguage(copyChanged = false) {
     option.setAttribute("aria-checked", active ? "true" : "false");
   }
   applyRecorderUI();
+  updateSessionExtraction(state.latestExtraction);
   if (copyChanged) {
     resetConversation();
     addBubble("agent", copy.languageChanged);

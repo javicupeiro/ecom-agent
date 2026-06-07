@@ -185,6 +185,20 @@ The current tests cover the main local building blocks:
 
 ## How The System Works
 
+High-level request flow:
+
+```mermaid
+flowchart LR
+    U[User] --> UI[Web UI]
+    UI --> API[FastAPI API]
+    API --> ORCH[Conversation Orchestrator]
+    ORCH --> LLM[LLM Provider]
+    ORCH --> TOOLS[Tools]
+    TOOLS --> KB[Knowledge Base]
+    TOOLS --> DATA[Orders and Memory]
+    API --> UI
+```
+
 At runtime, the request flow is:
 
 1. the browser UI sends a message to `POST /chat`,
@@ -217,7 +231,38 @@ Both `POST /chat` and `POST /chat/audio` return a normalized payload containing:
 - `output`: either a text payload or a voice payload with base64 audio,
 - `trace`: provider calls, tool usage, token accounting, and extraction metadata.
 
+## Key Design Decisions / Tradeoffs
+
+This repository intentionally favors clarity, modularity, and inspectability over hiding complexity behind a single abstraction.
+
+- Provider abstraction through classes and polymorphism: the rest of the system talks to models through the shared `LLMProvider` contract, so `anthropic`, `openai`, and `mock` providers can be swapped without rewriting the orchestrator, tools, or API surface.
+- Modular boundaries by responsibility: the app, orchestrator, providers, tools, RAG layer, persistence layer, prompts, and UI are kept separate so each part can evolve independently and be tested in isolation.
+- Prompt and provider isolation: prompt files live outside code and provider-specific SDK logic lives behind adapters. That keeps prompt iteration and model changes local instead of leaking across the whole project.
+- Visible traces instead of a black-box chatbot: the UI exposes provider calls, tool executions, token usage, and structured extraction so the agent can be debugged and defended during a technical review.
+- Local-first persistence for the assignment: JSON files and SQLite keep the project easy to run and inspect locally, even though a production system would likely use durable services instead.
+- Safety over autonomous side effects: in the current runtime configuration the app only allows read-oriented tools such as order lookup and knowledge-base search. This is deliberate. The agent can extract information and consult systems, but it does not perform automatic writes in the main flow without an explicit permission decision.
+
+That last point is an explicit tradeoff. The codebase already separates read and write capabilities, and write tools exist, but the default app policy intentionally keeps mutation disabled in the main demo path. For a technical assignment, that makes the behavior safer and easier to evaluate. In a production setup, the next step would be a confirmation flow or a human-in-the-loop approval step before enabling write-side actions.
+
 ## Architecture
+
+High-level module view:
+
+```mermaid
+flowchart TB
+    APP[app.py<br/>API and web entrypoint]
+    ORCH[orchestrator.py<br/>conversation flow]
+    PROVIDERS[providers/<br/>Anthropic · OpenAI · Mock]
+    TOOLS[tools/<br/>query_orders · search_knowledge_base · etc.]
+    DATA[data layer<br/>SQLite · JSON · Chroma · Markdown]
+    UI[ui/<br/>chat, traces, audio]
+
+    APP --> ORCH
+    ORCH --> PROVIDERS
+    ORCH --> TOOLS
+    TOOLS --> DATA
+    APP --> UI
+```
 
 ### High-level components
 
@@ -272,7 +317,7 @@ Contains provider adapters and the provider factory.
 - `factory.py` is the single place that maps config to a concrete provider.
 - `mock.py` supports tests and local deterministic behavior.
 
-This keeps the rest of the system provider-agnostic.
+This keeps the rest of the system provider-agnostic. The implementation relies on a class-based design with polymorphism: each provider adapter implements the same interface, so the system can switch providers without changing the orchestration logic.
 
 #### `src/ecom_agent/domain/`
 
@@ -293,6 +338,19 @@ Implements the capabilities the model can call.
 - concrete tool modules implement isolated capabilities such as querying orders, writing orders, recalling memories, and searching the knowledge base.
 
 Tools are kept separate because they are the boundary between model reasoning and deterministic side effects.
+
+#### Permission tradeoff in the current app
+
+The default FastAPI runtime only authorizes read-oriented tools in the main conversation flow. In practice, that means the agent can consult the order store and the knowledge base, but it does not execute write operations automatically from the public chat flow.
+
+This is intentional for the assignment:
+
+- it makes the demo safer to run locally,
+- it keeps side effects explicit,
+- it shows the permission boundary clearly,
+- and it leaves room for a later confirmation or approval mechanism before enabling writes.
+
+So the current behavior is: the agent extracts structured information, reasons over it, and can query supporting systems, but it does not mutate operational data by default.
 
 #### `src/ecom_agent/db/`
 
@@ -484,6 +542,8 @@ uv run python scripts/smoke.py
 The project is not just trying to answer questions with an LLM. It is trying to show a disciplined agent architecture where:
 
 - knowledge is grounded in a maintained document set,
+- components are modular and replaceable,
+- providers can be swapped through a shared class interface,
 - side effects happen through explicit tools,
 - prompts are externalized and localized,
 - configuration is typed and reproducible,
@@ -492,10 +552,36 @@ The project is not just trying to answer questions with an LLM. It is trying to 
 
 That makes the repository useful both as a teaching example and as a base for extending the SaborMix use case into a more complete customer-service agent.
 
-## Pending Work
+## Future Improvements
 
-- Extract the RAG layer into a separate project, for example an MCP server that owns the company's knowledge base. The agent could connect to that MCP and query it only when the conversation requires grounded business knowledge.
-- Make the retrieval stack more production-oriented with capabilities such as reranking, image support, and stronger retrieval quality controls.
-- Persist user conversations in a database instead of keeping them only in process memory or local JSON files. It is also worth evaluating whether conversation persistence should be exposed through a separate MCP service.
-- Treat the current repository as a demo baseline. In a production setup, the agent could connect to the real customer order database so it can reason with richer customer-specific context.
-- Improve the UI with features such as per-user logging, conversation history, and stronger session management for ongoing customer interactions.
+The current repository is intentionally scoped as a local demo project. If it were extended beyond the demo stage, the most valuable next steps would be:
+
+- **Production-grade retrieval pipeline**  
+  Improve the RAG stack with better chunking strategies, metadata filtering, reranking, and quality evaluation so grounded answers remain reliable as the knowledge base grows.
+
+- **Safer write workflows**  
+  Introduce explicit confirmation flows or human-in-the-loop approval before enabling side-effecting tools such as order updates. This would preserve the current safety model while making the agent more operational.
+
+- **Durable conversation and case storage**  
+  Move conversations, extracted structured data, and summaries from local JSON files and in-memory session state into a proper database for persistence, querying, and auditing.
+
+- **API-level error normalization**  
+  Standardize backend error handling across text, audio, transcription, and voice synthesis flows so the frontend receives consistent error payloads and recovery paths.
+
+- **Richer session and user management**  
+  Add persistent conversation history, user identities, and better session lifecycle handling so the system can support longer-running customer interactions.
+
+- **Stronger observability and evaluation**  
+  Add metrics, structured logs, prompt/version tracking, and automated evaluation datasets to measure answer quality, extraction accuracy, and tool behavior over time.
+
+- **Expanded provider and deployment flexibility**  
+  Keep the provider abstraction but extend it with easier runtime switching, environment-specific configuration, and deployment-friendly infrastructure for staging and production setups.
+
+- **Knowledge layer decoupling**  
+  Extract the retrieval subsystem into a dedicated service, such as an MCP-compatible knowledge server, so the conversational agent can stay focused on orchestration while knowledge management evolves independently.
+
+- **Improved multimodal experience**  
+  Continue refining the voice UX with better playback states, transcript visibility, streaming responses, and more resilient audio handling across browsers and devices.
+
+- **Real business system integration**  
+  Replace the demo order database with real operational systems, with proper authentication, authorization, and audit controls, so the agent can act on live customer context safely.

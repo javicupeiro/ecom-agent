@@ -40,3 +40,30 @@ class TurnExtraction(BaseModel):
         """Clamp the frustration score to the supported range."""
 
         return max(0.0, min(1.0, float(value)))
+
+    def merged(self, update: "TurnExtraction") -> "TurnExtraction":
+        """Combine this extraction with a later turn-level update."""
+
+        return TurnExtraction(
+            order_number=update.order_number or self.order_number,
+            problem_category=update.problem_category or self.problem_category,
+            problem_description=update.problem_description or self.problem_description,
+            frustration=max(self.frustration, update.frustration),
+            urgency_level=self._merge_urgency(update.urgency_level),
+        )
+
+    def _merge_urgency(self, next_urgency: str | None) -> str | None:
+        """Keep the highest known urgency across the conversation."""
+
+        current = self.urgency_level
+        if next_urgency is None:
+            return current
+        if current is None:
+            return next_urgency
+
+        rank = {"low": 0, "medium": 1, "high": 2, "critical": 3}
+        current_rank = rank.get(current)
+        next_rank = rank.get(next_urgency)
+        if current_rank is None or next_rank is None:
+            return next_urgency
+        return next_urgency if next_rank >= current_rank else current

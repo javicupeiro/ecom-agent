@@ -1,7 +1,7 @@
 [project]
 name = "ecom-agent"
 version = "0.1.0"
-description = "Add your description here"
+description = "Conversational AI agent demo for SaborMix with RAG, structured extraction, and voice I/O"
 readme = "README.md"
 authors = [
     { name = "javicupeiro", email = "javier.cupeiro.martin@gmail.com" }

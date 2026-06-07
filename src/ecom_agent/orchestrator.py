@@ -82,6 +82,7 @@ class Conversation:
         self.messages: list[Message] = [Message.system(system_prompt)]
         self.total_usage = Usage()
         self.compactor = compactor or NoCompaction()
+        self.extraction = TurnExtraction()
 
     def _ctx(self) -> Ctx:
         """Build the tool execution context for the current session."""
@@ -99,9 +100,19 @@ class Conversation:
         try:
             instr = load_prompt(_PROMPTS_DIR, "extract_turn_data", self.lang)
             resp = self.provider.send([Message.system(instr), Message.user(user_text)], [])
-            return TurnExtraction.model_validate(json.loads(resp.text()))
+            turn_extraction = TurnExtraction.model_validate(json.loads(resp.text()))
+            self.extraction = self.extraction.merged(turn_extraction)
+            return self.extraction
         except Exception:  # noqa: BLE001 - extraction must never crash the loop
-            return TurnExtraction()
+            return self.extraction
+
+    def _finalize_extraction(self, user_text: str) -> TurnExtraction:
+        """Update and persist the structured case snapshot for this session."""
+
+        extraction = self._extract_turn_data(user_text)
+        if self.store:
+            self.store.save_case(self.session_id, extraction.model_dump())
+        return extraction
 
     def send(self, user_text: str) -> TurnResult:
         """Run one user turn until the model answers or hits the step limit."""
@@ -132,7 +143,7 @@ class Conversation:
             if resp.stop_reason != "tool_use" or not uses:
                 if self.store:
                     self.store.save(self.session_id, {"role": "assistant", "text": resp.text()})
-                trace.extraction = self._extract_turn_data(user_text)
+                trace.extraction = self._finalize_extraction(user_text)
                 return TurnResult(reply=resp.text(), trace=trace)
 
             result_blocks = []
@@ -154,7 +165,7 @@ class Conversation:
                 )
             self.messages.append(Message(role="user", content=result_blocks))
 
-        trace.extraction = self._extract_turn_data(user_text)
+        trace.extraction = self._finalize_extraction(user_text)
         return TurnResult(reply="(step limit reached)", trace=trace)
     
     def summarize(self) -> dict:
