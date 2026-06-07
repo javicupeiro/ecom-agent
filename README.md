@@ -149,6 +149,7 @@ The browser UI now supports both spoken replies and spoken customer input.
 - The voice player in the chat supports play/stop, seek, and 10-second forward/back jumps.
 - The microphone in the composer lets the user record audio, pause/resume, delete it, send it directly, and replay the sent clip from the chat after upload.
 - Audio uploads are transcribed server-side and continue through the exact same agent pipeline as normal text turns.
+- Structured extraction is shown inside each turn trace, so the UI makes visible which fields were collected for that interaction without adding a separate persistent summary panel.
 
 ### 4. Optional smoke check
 
@@ -214,6 +215,11 @@ At runtime, the request flow is:
 
 This loop is implemented to make reasoning visible. The user does not just receive a final answer; the frontend can also inspect how many provider calls were made, which tools were used, and what structured metadata was extracted from the turn.
 
+Structured extraction is accumulated at the conversation level. Fields such as `order_number`, `problem_category`, `problem_description`, and `urgency_level` are preserved across turns as the interview progresses. Frustration is tracked with two signals:
+
+- `frustration`: the current frustration inferred from the latest customer turn,
+- `peak_frustration`: the highest frustration observed during the session.
+
 ## API Overview
 
 The frontend currently uses three HTTP endpoints:
@@ -231,6 +237,15 @@ Both `POST /chat` and `POST /chat/audio` return a normalized payload containing:
 - `output`: either a text payload or a voice payload with base64 audio,
 - `trace`: provider calls, tool usage, token accounting, and extraction metadata.
 
+The extraction payload currently includes:
+
+- `order_number`
+- `problem_category`
+- `problem_description`
+- `urgency_level`
+- `frustration` (current turn-level state)
+- `peak_frustration` (highest session-level value seen so far)
+
 ## Key Design Decisions / Tradeoffs
 
 This repository intentionally favors clarity, modularity, and inspectability over hiding complexity behind a single abstraction.
@@ -239,7 +254,7 @@ This repository intentionally favors clarity, modularity, and inspectability ove
 - Modular boundaries by responsibility: the app, orchestrator, providers, tools, RAG layer, persistence layer, prompts, and UI are kept separate so each part can evolve independently and be tested in isolation.
 - Prompt and provider isolation: prompt files live outside code and provider-specific SDK logic lives behind adapters. That keeps prompt iteration and model changes local instead of leaking across the whole project.
 - Visible traces instead of a black-box chatbot: the UI exposes provider calls, tool executions, token usage, and structured extraction so the agent can be debugged and defended during a technical review.
-- Local-first persistence for the assignment: JSON files and SQLite keep the project easy to run and inspect locally, even though a production system would likely use durable services instead.
+- Local-first persistence for the assignment: SQLite is used for orders, while JSON files keep both the raw conversation log and the latest structured case snapshot easy to inspect locally.
 - Safety over autonomous side effects: in the current runtime configuration the app only allows read-oriented tools such as order lookup and knowledge-base search. This is deliberate. The agent can extract information and consult systems, but it does not perform automatic writes in the main flow without an explicit permission decision.
 
 That last point is an explicit tradeoff. The codebase already separates read and write capabilities, and write tools exist, but the default app policy intentionally keeps mutation disabled in the main demo path. For a technical assignment, that makes the behavior safer and easier to evaluate. In a production setup, the next step would be a confirmation flow or a human-in-the-loop approval step before enabling write-side actions.
@@ -300,6 +315,7 @@ This is the core of the agent. It owns the conversation loop and decides what ha
 - detect tool requests,
 - dispatch tools safely,
 - append tool results back into the transcript,
+- accumulate structured extraction across turns,
 - return the final answer and trace.
 
 This separation is important because the orchestrator is the behavior engine, while `app.py` is only the delivery surface.
@@ -369,7 +385,7 @@ This separation keeps retrieval concerns independent from the conversation loop.
 
 #### `src/ecom_agent/memory/`
 
-Provides long-lived memory persistence. The default implementation writes JSON session logs under `.data/memory`. It is intentionally simple so the rest of the code depends on a storage interface rather than a specific backend.
+Provides long-lived memory persistence. The default implementation writes JSON session logs under `.data/memory` and stores the latest structured case snapshot under `.data/memory/cases`. It is intentionally simple so the rest of the code depends on a storage interface rather than a specific backend.
 
 #### `src/ecom_agent/compaction/`
 
@@ -485,6 +501,7 @@ Contains the static frontend served by FastAPI.
 - `index.html` defines the page shell.
 - `app.js` manages chat state, sends API requests, switches language, and renders execution traces.
 - `app.js` also handles voice playback, audio recording, and upload/transcription flows.
+- extraction is shown in the trace for each turn, including the current frustration value returned by the backend.
 - `styles.css` defines the presentation.
 
 This folder is intentionally separate from `src/` because it is a static client, not part of the Python package.
